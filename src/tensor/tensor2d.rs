@@ -1,4 +1,4 @@
-use crate::{dtype::{Dtype, Shape}, fn_edge::{Add2d, FnEdge, HumanCreatedFnEdge}, raw_tensor::RawTensor2d};
+use crate::{dtype::{Dtype, Shape}, fn_edge::{get_new_fn_edge_id, Add2d, FnEdge, HumanCreatedFnEdge}, raw_tensor::RawTensor2d};
 
 use super::{get_new_tensor_id, Tensor, TensorID};
 
@@ -45,8 +45,10 @@ impl<const R: usize, const C: usize, T: Dtype> Tensor2d<R, C, T> {
     }
 
     pub fn add(&self, other: &Self) -> Self {
-        let new_id = get_new_tensor_id(false);
-        let add2d = Add2d::<R, C, T> {
+        let new_id: TensorID = get_new_tensor_id(false);
+        let add2d: Add2d<R, C, T> = Add2d::<R, C, T> {
+            id: get_new_fn_edge_id(),
+            sources: vec![self.creator.clone(), other.creator.clone()],
             input1_id: self.id,
             input2_id: other.id,
             output_id: new_id,

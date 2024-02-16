@@ -1,15 +1,15 @@
-//use autograd::Autograd;
+use autograd::Autograd;
 //use optimizer::Sgd;
 use raw_tensor::RawTensor2d;
-//use tensor::Tensor2d;
+use tensor::Tensor2d;
 
 
 mod raw_tensor;
 mod backend_cpu;
-//mod fn_edge;
-//mod tensor;
+mod fn_edge;
+mod tensor;
 //mod optimizer;
-//mod autograd;
+mod autograd;
 mod dtype;
 mod logger;
 mod machine_config;
@@ -75,9 +75,34 @@ fn raw_add() {
     ]).name("input2");
 
     let output = input1.add(&input2);
-    println!("{:?}", output.strage);
+    println!("{:?}", output.storage);
+}
+
+fn tensor_add() {
+    let input1: RawTensor2d<2, 2, f32> = RawTensor2d::new_from_martix([
+        [1.0, 2.0],
+        [3.0, 4.0]
+    ]).name("input1");
+    let input2: RawTensor2d<2, 2, f32> = RawTensor2d::new_from_martix([
+        [1.0, 2.0],
+        [3.0, 4.0]
+    ]).name("input2");
+    let node1 = Tensor2d::new_from_val(input1);
+    let node2 = Tensor2d::new_from_val(input2);
+
+    let output = node1.add(&node2);
+
+    // forwardだけexecute
+    let mut autograd = Autograd::new();
+    let result = autograd.step_forward([output.to_untyped()]);
+
+    
+    if let Some(val) = &result[0].val {
+        println!("{:?}", val.storage);
+    }
 }
 
 fn main() {
-    raw_add();
+    //raw_add();
+    tensor_add();
 }

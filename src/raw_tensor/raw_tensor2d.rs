@@ -4,7 +4,7 @@ use super::{RawTensor, Storage};
 
 pub struct RawTensor2d<const R: usize, const C: usize, T> {
     pub name: String,
-    pub strage: Storage,
+    pub storage: Storage,
     pub dummy: T,
 }
 impl<const R: usize, const C: usize, T: Dtype> RawTensor2d<R, C, T> {
@@ -12,14 +12,14 @@ impl<const R: usize, const C: usize, T: Dtype> RawTensor2d<R, C, T> {
         RawTensor {
             name: self.name,
             shape: Shape::D2(R, C),
-            strage: self.strage,
+            storage: self.storage,
         }
     }
 
     pub fn add(&self, other: &Self) -> Self {
         Self {
             name: "added".to_string(),
-            strage: &self.strage + &other.strage,
+            storage: &self.storage + &other.storage,
             dummy: T::default()
         }
     }
@@ -41,7 +41,7 @@ impl<const R: usize, const C: usize> RawTensor2d<R, C, f32> {
         };
         Self {
             name: "no_name".to_string(),
-            strage: Storage::Densef32(raw_dense),
+            storage: Storage::Densef32(raw_dense),
             dummy: <f32 as Dtype>::default(),
         }
     }

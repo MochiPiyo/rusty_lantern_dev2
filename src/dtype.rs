@@ -1,5 +1,7 @@
+use std::fmt::{Display, Formatter};
 
-pub trait Dtype {
+
+pub trait Dtype: Copy + 'static {
     fn default() -> Self;
 }
 
@@ -9,6 +11,7 @@ impl Dtype for f32 {
     }
 }
 
+#[derive(PartialEq, Clone)]
 pub enum Shape {
     D1(usize),
     D2(usize, usize),
@@ -19,6 +22,11 @@ impl Shape {
             Self::D1(i) => format!("Shape::D1({})", i),
             Self::D2(i, j) => format!("Shape::D2({}, {})", i, j),
         }
+    }
+}
+impl Display for Shape {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_string())
     }
 }
 
