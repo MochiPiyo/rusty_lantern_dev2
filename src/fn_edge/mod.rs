@@ -7,7 +7,7 @@ mod add;
 pub use add::Add2d;
 
 mod matmul;
-pub use matmul::{Matmul, matmul};
+pub use matmul::Matmul;
 mod relu;
 pub use relu::Relu;
 
