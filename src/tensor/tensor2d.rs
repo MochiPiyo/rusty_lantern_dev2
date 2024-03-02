@@ -1,66 +1,93 @@
-use crate::{dtype::{Dtype, Shape}, fn_edge::{get_new_fn_edge_id, Add2d, FnEdge, HumanCreatedFnEdge}, raw_tensor::RawTensor2d};
+use std::{fmt::Debug, marker::PhantomData, sync::{Arc, RwLock}};
 
-use super::{get_new_tensor_id, Tensor, TensorID};
+use crate::{backend_cpu::RawDense, dtype::{Dtype, Shape}};
 
+use super::{Tensor, Storage};
+
+#[derive(Debug)]
 pub struct Tensor2d<const R: usize, const C: usize, T> {
-    pub id: TensorID,
     pub name: String,
-    pub creator: Box<dyn FnEdge>,
-
-    pub val: Option<RawTensor2d<R, C, T>>,
-    pub grad: Option<RawTensor2d<R, C, T>>,
-    pub dummy: T
+    pub storage: Arc<Storage>,
+    pub _marker: PhantomData<T>,
 }
+
 impl<const R: usize, const C: usize, T: Dtype> Tensor2d<R, C, T> {
-    pub fn new_from_val(val: RawTensor2d<R, C, T>) -> Self {
-        Self {
-            id: get_new_tensor_id(false),
-            name: "no_name".to_string(),
-            creator: Box::new(HumanCreatedFnEdge::new()),
-            val: Some(val),
-            grad: None,
-            dummy: T::default(),
-        }
+    pub fn storage(&self) -> Arc<Storage> {
+        self.storage.clone()
     }
 
     pub fn to_untyped(self) -> Tensor {
-        let val_untyped = if let Some(val) = self.val {
-            Some(val.to_untyped())
-        } else {
-            None
-        };
-        let grad_untyped = if let Some(grad) = self.grad {
-            Some(grad.to_untyped())
-        } else {
-            None
-        };
         Tensor {
-            id: self.id,
             name: self.name,
-            creator: self.creator,
             shape: Shape::D2(R, C),
-            val: val_untyped,
-            grad: grad_untyped,
+            storage: self.storage,
         }
     }
 
+    pub fn name(mut self, name: &str) -> Self {
+        self.name = name.to_string();
+        self
+    }
+
     pub fn add(&self, other: &Self) -> Self {
-        let new_id: TensorID = get_new_tensor_id(false);
-        let add2d: Add2d<R, C, T> = Add2d::<R, C, T> {
-            id: get_new_fn_edge_id(),
-            sources: vec![self.creator.clone(), other.creator.clone()],
-            input1_id: self.id,
-            input2_id: other.id,
-            output_id: new_id,
-            dummy: T::default()
+        Self {
+            name: "added".to_string(),
+            // &は演算で所有権を消費しないため，＊はRwLockGuardの参照をとるため
+            storage: Arc::new(&*self.storage() + &*other.storage()),
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn transpose(&self) -> Tensor2d<C, R, T> {
+        // <R, C, T> to <C, R, T>
+        Tensor2d::<C, R, T> {
+            name: format!("{} -> transposed", self.name),
+            storage: Arc::new(self.storage().transpose(Shape::D2(R, C))),
+            _marker: PhantomData,
+        }
+    }
+}
+
+
+impl<const R: usize, const C: usize> Tensor2d<R, C, f32> {
+    pub fn new_from_martix(matrix: [[f32; C]; R]) -> Self {
+        let mut data = Vec::with_capacity(R*C);
+        for i in 0..matrix.len() {
+            data.extend_from_slice(&matrix[i]);
+        }
+        let raw_dense = RawDense {
+            body: data,
         };
         Self {
-            id: new_id,
-            name: "add2d".to_string(),
-            creator: Box::new(add2d),
-            val: None,
-            grad: None,
-            dummy: T::default()
+            name: "no_name".to_string(),
+            storage: Arc::new(Storage::Densef32(raw_dense)),
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn new_from_vec(data: Vec<f32>) -> Result<Self, ()> {
+        if data.len() != R * C {
+            return Err(());
+        }
+        Ok(Self {
+            name: String::new(),
+            storage: Arc::new(Storage::Densef32(RawDense { body: data })),
+            _marker: PhantomData,
+        })
+    }
+
+    pub fn new_ones() -> Self {
+        let mut body = Vec::new();
+            for i in 0..R {
+                for j in 0..C {
+                    body.push(1.0);
+                }
+            }
+        let raw_dense = RawDense { body };
+        Self {
+            name: "no_name".to_string(),
+            storage: Arc::new(Storage::Densef32(raw_dense)),
+            _marker: PhantomData,
         }
     }
 }

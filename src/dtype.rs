@@ -1,17 +1,23 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{format, Debug, Display, Formatter};
 
 
-pub trait Dtype: Copy + 'static {
+// トレイト'staticは内部に参照を含まないことを保証する
+pub trait Dtype: Copy + Debug + 'static {
     fn default() -> Self;
+    fn type_name() -> String;
 }
 
 impl Dtype for f32 {
     fn default() -> Self {
         0.0
     }
+
+    fn type_name() -> String {
+        "f32".to_string()
+    }
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum Shape {
     D1(usize),
     D2(usize, usize),

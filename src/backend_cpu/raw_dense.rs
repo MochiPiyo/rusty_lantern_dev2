@@ -1,8 +1,7 @@
 use rayon::prelude::*;
 use std::{fmt::Debug, ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign}, sync::Mutex};
-use lazy_static::lazy_static;
 
-use crate::machine_config::{MACHINE_CONFIG, self};
+use crate::{dtype::Shape, machine_config::MACHINE_CONFIG};
 
 
 // todo!
@@ -27,6 +26,48 @@ pub struct RawDense<T> {
 
 impl RawDense<f32>
 {
+
+    pub fn matmul(lhs: &Self, lhs_shape: Shape, rhs: &Self, rhs_shape: Shape) -> RawDense<f32> {
+        match (lhs_shape, rhs_shape) {
+            (Shape::D2(lhs_rows, lhs_cols), Shape::D2(rhs_rows, rhs_cols)) if lhs_cols == rhs_rows => {
+                let mut result = vec![0.0; lhs_rows * rhs_cols];
+
+                // ikj
+                result.par_chunks_mut(rhs_cols).enumerate().for_each(|(i, result_row)| {
+                    for k in 0..lhs_cols {
+                        for j in 0..rhs_cols {
+                            result_row[j] += lhs.body[i * lhs_cols + k] * rhs.body[k * rhs_cols + j];
+                        }
+                    }
+                });
+                RawDense { body: result }
+            }
+            _ => panic!("RawDense<f32> matmul(). Invalid shapes for matrix multiplication. lhs: {}, rhs: {}", lhs_shape.to_string(), rhs_shape.to_string()),
+        }
+    }
+
+    pub fn transpose(&self, shape: Shape) -> Self {
+        match shape {
+            Shape::D1(_) => {
+                // For a 1D array, the transpose is the same as the original
+                RawDense {
+                    body: self.body.clone(),
+                }
+            }
+            Shape::D2(rows, cols) => {
+                let mut transposed_body = Vec::with_capacity(self.body.len());
+                for col in 0..cols {
+                    for row in 0..rows {
+                        transposed_body.push(self.body[row * cols + col].clone());
+                    }
+                }
+                RawDense {
+                    body: transposed_body,
+                }
+            }
+        }
+    }
+
     // use like self.template_op(other, "Raw Add", |a, b| a + b)
     /*
     operation: dyn Fn(T, T) -> T、実行時オーバーヘッドあり

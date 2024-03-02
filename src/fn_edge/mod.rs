@@ -1,24 +1,33 @@
 
 use std::fmt;
 
-use crate::autograd::Context;
+use crate::{autograd::Context, nten::NtenID};
 
 mod add;
 pub use add::Add2d;
+
+mod matmul;
+pub use matmul::{Matmul, matmul};
+mod relu;
+pub use relu::Relu;
 
 
 
 /*-------------Level 2, graph node & system-----------------------------------
 */
 pub trait FnEdge {
+    //fn name(&self) -> String;
     // 計算グラフ構築用
-    fn id(&self) -> FnEdgeID;
-    fn inputs(&self) -> Vec<Box<dyn FnEdge>>;
+    fn get_id(&self) -> FnEdgeID;
+    fn sources(&self) -> Vec<Box<dyn FnEdge>>;
+    fn inputs(&self) -> Vec<NtenID>; // ctxにNtenをビルド時に予め作成しておくため
     fn clone_box(&self) -> Box<dyn FnEdge>;
     // 計算実行用
     fn forward(&self, ctx: &mut Context);
     fn backward(&self, ctx: &mut Context);
 
+    // デバック
+    //fn name(&self) -> String;
 }
 // Implement Clone for Box<dyn FnEdge> using the clone_box method
 impl Clone for Box<dyn FnEdge> {
@@ -55,18 +64,21 @@ impl DummyFnEdge {
     }
 }
 impl FnEdge for DummyFnEdge {
-    fn id(&self) -> FnEdgeID {
+    fn get_id(&self) -> FnEdgeID {
         self.id
     }
-    fn inputs(&self) -> Vec<Box<dyn FnEdge>> {
+    fn sources(&self) -> Vec<Box<dyn FnEdge>> {
         // this must return vec of nothing for stop graph walk in making tape stage
         vec![]
     }
+    fn inputs(&self) -> Vec<NtenID> {
+        vec![]
+    }
     fn forward(&self, ctx: &mut Context) {
-        panic!("Error: you executed DummyFnEdge.forward()");
+        println!("you executed DummyFnEdge.forward()");
     }
     fn backward(&self, ctx: &mut Context) {
-        panic!("Error: you executed DummyFnEdge.backward() you may run backward while using Mode::Inference");
+        println!("you executed DummyFnEdge.backward() you may run backward while using Mode::Inference");
     }
     fn clone_box(&self) -> Box<dyn FnEdge> {
         Box::new(self.clone())
@@ -85,17 +97,20 @@ impl HumanCreatedFnEdge {
     }
 }
 impl FnEdge for HumanCreatedFnEdge {
-    fn id(&self) -> FnEdgeID {
+    fn get_id(&self) -> FnEdgeID {
         self.id
     }
-    fn inputs(&self) -> Vec<Box<dyn FnEdge>> {
+    fn sources(&self) -> Vec<Box<dyn FnEdge>> {
+        vec![]
+    }
+    fn inputs(&self) -> Vec<NtenID> {
         vec![]
     }
     fn forward(&self, ctx: &mut Context) {
-        panic!("Error: you executed DummyFnEdge.forward()");
+        println!("you executed DummyFnEdge.forward()");
     }
     fn backward(&self, ctx: &mut Context) {
-        panic!("Error: you executed DummyFnEdge.backward() you may run backward while using Mode::Inference");
+        println!("you executed DummyFnEdge.backward() you may run backward while using Mode::Inference");
     }
     fn clone_box(&self) -> Box<dyn FnEdge> {
         Box::new(self.clone())
