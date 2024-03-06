@@ -6,7 +6,7 @@ use super::{get_new_nten_id, Nten2d};
 
 pub fn matmul<const N: usize, const M: usize, const O: usize, T: Dtype>
     (lhs: &Nten2d<N, M, T>, rhs: &Nten2d<M, O, T>) -> Nten2d<N, O, T> {
-    let new_id = get_new_nten_id(false);
+    let new_id = get_new_nten_id();
     let matmul = Matmul::<N, M, O, T> {
         id: get_new_fn_edge_id(),
         name: format!("Matmul<{}, {}, {}, {}>", N, M, O, T::type_name()),

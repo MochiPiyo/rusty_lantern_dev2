@@ -12,3 +12,6 @@ rayon = "*"
 # random
 rand = "*"
 rand_distr = "*"
+
+# color
+colored = "2.0"

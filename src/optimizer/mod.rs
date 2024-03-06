@@ -1,10 +1,10 @@
 
-use crate::autograd::Context;
+use std::sync::RwLockWriteGuard;
+
+use crate::{autograd::Context, tensor::{Storage, Tensor}};
 
 mod sgd;
 pub use sgd::Sgd;
-
-
 
 pub trait Optimizer {
     fn update(&mut self, ctx: &mut Context);

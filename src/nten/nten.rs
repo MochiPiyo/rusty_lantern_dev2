@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::{dtype::Shape, fn_edge::FnEdge, tensor::{self, Tensor}};
 
 use super::NtenID;
@@ -19,4 +21,8 @@ impl Nten {
         self
     }
 
+    pub fn set_grad(&mut self, grad: Tensor) {
+        self.grad = Some(grad);
+    }
 }
+

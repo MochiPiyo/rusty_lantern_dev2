@@ -14,12 +14,13 @@ impl Sgd {
 }
 impl Optimizer for Sgd {
     fn update(&mut self, ctx: &mut crate::autograd::Context) {
-        for parameter_id in ctx.varstore.parameter_ids.iter() {
+        for parameter_id in ctx.varstore.parameter_ids.lock().unwrap().iter() {
             let grad = ctx.get_grad(parameter_id);
-            grad.mul_scalar(self.learning_rate);
-
             let val = ctx.get_val(parameter_id);
 
+            // update
+            let new_value = &val - &grad.mul_scalar(self.learning_rate);
+            val.override_value(new_value);
         }
     }
 }

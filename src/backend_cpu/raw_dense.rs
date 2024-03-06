@@ -76,6 +76,25 @@ impl RawDense<f32>
         self
     }
 
+    pub fn sum_batch(&self, shape: Shape) -> Self {
+        match shape {
+            Shape::D1(n) => {
+                self.clone()
+            },
+            Shape::D2(r, c) => {
+                let mut sum = vec![0.0; c];
+                for chunk in self.body.chunks(c) {
+                    for (s, i) in sum.iter_mut().zip(chunk.iter()) {
+                        *s += *i;
+                    }
+                }
+                Self {
+                    body: sum,
+                }
+            }
+        }
+    }
+
     pub fn select_larger_than(&self, condition: f32) -> RawBool {
         let mut bools = RawBool::new();
         for i in self.body.iter() {
@@ -100,8 +119,12 @@ impl RawDense<f32>
         bools
     }
 
-    pub fn replace_where_to_scalar(&mut self, to: f32) {
-
+    pub fn replace_where_to_scalar(&mut self, mask: &RawBool, to: f32) {
+        for (self_i, bool_i) in self.body.iter_mut().zip(mask.iter()) {
+            if bool_i == true {
+                *self_i = to;
+            }
+        }
     }
 
     

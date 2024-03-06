@@ -35,6 +35,27 @@ impl Tensor {
         }
     }
 
+    pub fn new_from_vec(data: Vec<f32>, shape: Shape) -> Result<Self, ()> {
+        match shape {
+            Shape::D1(n) => {
+                if data.len() != n {
+                    return Err(());
+                }
+            },
+            Shape::D2(r, c) => {
+                if data.len() != r * c {
+                    return Err(());
+                }
+            }
+        }
+        
+        Ok(Self {
+            name: String::new(),
+            shape,
+            storage: Arc::new(RwLock::new(Storage::Densef32(RawDense { body: data }))),
+        })
+    }
+
     pub fn storage(&self) -> RwLockReadGuard<'_, Storage> {
         self.storage.read().unwrap()
     }
@@ -43,6 +64,12 @@ impl Tensor {
         self.storage.write().unwrap()
     }
     */
+
+    // これはArc内部を書き換えるので注意！
+    pub fn override_value(&self, new_value: Self) {
+        let mut write = self.storage.write().unwrap();
+        *write = new_value.storage().clone();
+    }
 
     pub fn to_typed2d<const R: usize, const C: usize, T: Dtype>(&self) -> Result<Tensor2d<R, C, T>, String> {
         if let Shape::D2(r, c) = self.shape {
@@ -128,3 +155,16 @@ impl Tensor {
         }
     }
 }  
+
+impl std::ops::Sub for &Tensor {
+    type Output = Tensor;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        let storage = &*self.storage() - &*rhs.storage();
+        Self::Output {
+            name: "tensor Sub".to_string(),
+            shape: self.shape.clone(),
+            storage: Arc::new(RwLock::new(storage)),
+        }
+    }
+}

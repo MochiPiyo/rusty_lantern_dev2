@@ -22,12 +22,12 @@ impl<const R: usize, const C: usize, T: Dtype> FnEdge for Relu2d<R, C, T> {
         self.id
     }
 
-    fn sources(&self) -> Vec<Box<dyn FnEdge>> {
-        self.sources.clone()
+    fn name(&self) -> String {
+        format!("Relu<{}, {}, {}>", R, C, T::type_name())
     }
 
-    fn inputs(&self) -> Vec<NtenID> {
-        vec![self.input_id]
+    fn sources(&self) -> Vec<Box<dyn FnEdge>> {
+        self.sources.clone()
     }
 
     fn clone_box(&self) -> Box<dyn FnEdge> {
@@ -35,7 +35,6 @@ impl<const R: usize, const C: usize, T: Dtype> FnEdge for Relu2d<R, C, T> {
     }
 
     fn forward(&self, ctx: &mut crate::autograd::Context) {
-        LOGGER.debug(format!("Relu2d<{},{},{}> forward", R, C, T::type_name()));
         let input: Tensor2d<R, C, T> = ctx.get_val_as_2d(&self.input_id);
 
         let mask: Tensor2d<R, C, bool> = input.select_smaller_than(T::from_f32(0.0));
@@ -47,12 +46,11 @@ impl<const R: usize, const C: usize, T: Dtype> FnEdge for Relu2d<R, C, T> {
     }
 
     fn backward(&self, ctx: &mut crate::autograd::Context) {
-        LOGGER.debug(format!("Relu2d<{},{},{}> backward", R, C, T::type_name()));
         let din: Tensor2d<R, C, T> = ctx.get_val_as_2d(&self.output_id);
 
         let mask: Tensor2d<R, C, bool> = ctx.get_tensor_as_2d(&self.mask_cach_id);
         let dout: Tensor2d<R, C, T> = din.replace_scalar_where(&mask, T::from_f32(0.0));
 
-        ctx.insert_val(&self.output_id, dout.to_untyped());
+        ctx.add_assign_grad(&self.output_id, &dout.to_untyped());
     }
 }

@@ -1,6 +1,6 @@
 use std::sync::RwLockWriteGuard;
 
-use crate::{backend_cpu::RawDense, dtype::{Dtype, Shape}, nten::Nten, tensor::{Storage, Tensor}};
+use crate::{backend_cpu::RawDense, dtype::{Dtype, Shape}, nten::Nten, tensor::{Storage, Tensor, Tensor2d}};
 
 // implaceは危険なので制限する
 impl Tensor {
@@ -9,15 +9,11 @@ impl Tensor {
     }
 }
 
-
-
-fn softmax_per_batch(input: &mut Tensor) {}
-
-// 
+// set predict.grad and returns loss of this batch
 pub fn softmax_cross_entropy_f32(predict: &mut Nten, teacher: Tensor) -> f32 {
     // Assuming the logits are stored in predict.val and the labels are stored in teacher
     let logits = if let Storage::Densef32(ref raw_dense) =
-        &*predict.val.unwrap().storage()
+        *predict.val.clone().unwrap().storage()
     {
         raw_dense.body.clone()
     } else {
@@ -70,7 +66,9 @@ pub fn softmax_cross_entropy_f32(predict: &mut Nten, teacher: Tensor) -> f32 {
     loss = loss / batch_size as f64;
 
     // Update the gradient in the predict tensor
-    *predict.grad.unwrap().storage_mut() = Storage::Densef32(RawDense { body: grad });
+    predict.set_grad(Tensor::new_from_vec(grad, predict.shape).unwrap());
+    
+    println!("{:?}", predict.grad);
 
     loss as f32
 }

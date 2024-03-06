@@ -15,7 +15,7 @@ FnEdgeは全デバイスで共通，FnEdgeの内部で分岐する
 
 // reference impl
 pub fn add<const R: usize, const C: usize, T: Dtype>(lhs: &Nten, rhs: &Nten) -> Nten {
-    let new_id: NtenID = get_new_nten_id(false);
+    let new_id: NtenID = get_new_nten_id();
     let add2d: Add2d<R, C, T> = Add2d::<R, C, T> {
         id: get_new_fn_edge_id(),
         name: format!("Add2d<{}, {}, {}>", R, C, T::type_name()),
@@ -51,18 +51,17 @@ impl<const R: usize, const C: usize, T: Dtype> FnEdge for Add2d<R, C, T> {
     fn get_id(&self) -> FnEdgeID {
         self.id
     }
+    fn name(&self) -> String {
+        format!("Add2d<{},{},{}>", R, C, T::type_name())
+    }
     fn sources(&self) -> Vec<Box<dyn FnEdge>> {
         self.sources.clone()
-    }
-    fn inputs(&self) -> Vec<NtenID> {
-        vec![self.input1_id, self.input2_id]
     }
     fn clone_box(&self) -> Box<dyn FnEdge> {
         Box::new(self.clone())
     }
 
     fn forward(&self, ctx: &mut Context) {
-        LOGGER.debug(format!("Add2d<{},{},{}> forward", R, C, T::type_name()));
         let input1: Tensor2d<R, C, T> = ctx.get_val_as_2d(&self.input1_id);
         let input2: Tensor2d<R, C, T> = ctx.get_val_as_2d(&self.input2_id);
 
@@ -73,7 +72,6 @@ impl<const R: usize, const C: usize, T: Dtype> FnEdge for Add2d<R, C, T> {
     }
 
     fn backward(&self, ctx: &mut Context) {
-        LOGGER.debug(format!("Add2d<{},{},{}> backward", R, C, T::type_name()));
         let dout = ctx.get_grad(&self.output_id);
 
         ctx.add_assign_grad(&self.input1_id, &dout);

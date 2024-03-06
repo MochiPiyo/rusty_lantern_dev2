@@ -1,5 +1,5 @@
 
-use std::marker::PhantomData;
+use std::{fmt::format, marker::PhantomData};
 use crate::{autograd::Context, dtype::{Dtype, Shape}, logger::LOGGER, nten::{get_new_nten_id, Nten, Nten2d, NtenID}, tensor::{self, Tensor2d}};
 use super::{get_new_fn_edge_id, FnEdge, FnEdgeID};
 
@@ -24,11 +24,15 @@ impl<const N: usize, const M: usize, const O: usize, T: Dtype> FnEdge for Matmul
     fn get_id(&self) -> FnEdgeID {
         self.id
     }
+    fn name(&self) -> String {
+        format!("Matmul<{}, {}, {}, {}> that means matmul of Nten<{}, {}, {}> and Nten<{}, {}, {}>",
+            N, M, O, T::type_name(),
+            N, M, T::type_name(),
+            M, O, T::type_name()
+        )
+    }
     fn sources(&self) -> Vec<Box<dyn FnEdge>> {
         self.sources.clone()
-    }
-    fn inputs(&self) -> Vec<NtenID> {
-        vec![self.lhs_id, self.rhs_id]
     }
     fn clone_box(&self) -> Box<dyn FnEdge> {
         Box::new(self.clone())
@@ -36,6 +40,7 @@ impl<const N: usize, const M: usize, const O: usize, T: Dtype> FnEdge for Matmul
 
 
     fn forward(&self, ctx: &mut Context) {
+        ctx.varstore.print_all_contents_id();
         let lhs: Tensor2d<N, M, T> = ctx.get_val_as_2d(&self.lhs_id);
         let rhs: Tensor2d<M, O, T> = ctx.get_val_as_2d(&self.rhs_id);
 

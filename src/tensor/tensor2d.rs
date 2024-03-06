@@ -1,9 +1,10 @@
-use std::{fmt::Debug, marker::PhantomData, sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard}};
+use std::{fmt::{format, Debug}, marker::PhantomData, sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard}};
 
 use crate::{backend_cpu::{RawBool, RawDense}, dtype::{Dtype, Shape}, logger::LOGGER};
 
 use super::{Tensor, Storage};
 
+use colored::Colorize;
 use rand::distributions::{Distribution, Uniform};
 use rand_distr::Normal;
 
@@ -15,6 +16,50 @@ pub struct Tensor2d<const R: usize, const C: usize, T> {
 }
 
 impl<const R: usize, const C: usize, T: Dtype> Tensor2d<R, C, T> {
+    pub fn new_zeros() -> Self {
+        if T::type_name() == "f32".to_string() {
+            let mut body = Vec::new();
+            for i in 0..R {
+                for j in 0..C {
+                    body.push(0.0);
+                }
+            }
+            let raw_dense = RawDense { body };
+            Self {
+                name: "no_name".to_string(),
+                storage: Arc::new(RwLock::new(Storage::Densef32(raw_dense))),
+                _marker: PhantomData,
+            }
+        } else {
+            LOGGER.error(format!("{}::{}() >> not suppoerted T", Self::type_name().green(), "new_zeros".yellow()));
+            panic!();
+        }
+    }
+    pub fn new_ones() -> Self {
+        if T::type_name() == "f32".to_string() {
+            let mut body = Vec::new();
+            for i in 0..R {
+                for j in 0..C {
+                    body.push(1.0);
+                }
+            }
+            let raw_dense = RawDense { body };
+            Self {
+                name: "no_name".to_string(),
+                storage: Arc::new(RwLock::new(Storage::Densef32(raw_dense))),
+                _marker: PhantomData,
+            }
+        } else {
+            LOGGER.error(format!("{}::{}() >> not suppoerted T", Self::type_name().green(), "new_zeros".yellow()));
+            panic!();
+        }
+        
+    }
+
+    pub fn type_name() -> String {
+        format!("Tensor2d<{}, {}, {}>", R, C, T::type_name())
+    }
+
     pub fn storage(&self) -> RwLockReadGuard<'_, Storage> {
         self.storage.read().unwrap()
     }
@@ -22,6 +67,12 @@ impl<const R: usize, const C: usize, T: Dtype> Tensor2d<R, C, T> {
     pub fn storage_mut(&self) -> RwLockWriteGuard<'_, Storage> {
         self.storage.write().unwrap()
     }*/
+
+    // これはArc内部を書き換えるので注意！
+    pub fn override_value(&self, new_value: Self) {
+        let mut write = self.storage.write().unwrap();
+        *write = new_value.storage().clone();
+    }
     
     pub fn to_untyped(&self) -> Tensor {
         Tensor {
@@ -47,21 +98,40 @@ impl<const R: usize, const C: usize, T: Dtype> Tensor2d<R, C, T> {
 
     pub fn add_broadcast(&self, bias: &Tensor2d<1, C, T>) -> Self {
         // &*はRwLockReadGuard<'_, T>を&Tにしている
-        let raw_dense = match (&*self.storage(), &*bias.storage()) {
+        match (&*self.storage(), &*bias.storage()) {
             (Storage::Densef32(raw), Storage::Densef32(raw_bias)) => {
                 let mut new = raw.clone();
                 new.add_broadcast(raw_bias, Shape::D2(R, C));
-                new
+                Self {
+                    name: "add_broadcast".to_string(),
+                    storage: Storage::new_f32(new.body),
+                    _marker: PhantomData,
+                }
             },
             (_, _) => {
                 LOGGER.error(format!("Tensor2d<{}, {}, {}> >> unsupported Storage type. lhs name: '{}', rhs name: '{}'", R, C, T::type_name(), self.name, bias.name));
                 panic!()
             },
-        };
-        Self {
-            name: "add_broadcast".to_string(),
-            storage: Storage::new_f32(raw_dense.body),
-            _marker: PhantomData,
+        }
+    }
+
+    pub fn sum_batch(&self) -> Tensor2d<1, C, T> {
+        // &*はRwLockReadGuard<'_, T>を&Tにしている
+        match &*self.storage() {
+            Storage::Densef32(raw) => {
+                let new = raw.sum_batch(Shape::D2(R, C));
+                Tensor2d::<1, C, T> {
+                    name: "sum_batch".to_string(),
+                    storage: Storage::new_f32(new.body),
+                    _marker: PhantomData,
+                }
+            },
+            _ => {
+                LOGGER.error(format!("{}::{}() >> Storage type expection. {} is not supported",
+                    Self::type_name().green(), "sum_batch".yellow(),
+                    self.storage().info()));
+                panic!("")
+            }
         }
     }
 
@@ -98,7 +168,9 @@ impl<const R: usize, const C: usize, T: Dtype> Tensor2d<R, C, T> {
                 }
             },
             _ => {
-                LOGGER.error(format!("Tensor2d<{}, {}, {}>::select_larger_than() >> Storage type expection. {} is not supported", R, C, T::type_name(), self.storage().info()));
+                LOGGER.error(format!("{}::{}() >> Storage type expection. {} is not supported",
+                    Self::type_name().green(), "select_larger_than".yellow(),
+                    self.storage().info()));
                 panic!("")
             }
         }
@@ -123,7 +195,9 @@ impl<const R: usize, const C: usize, T: Dtype> Tensor2d<R, C, T> {
                 }
             },
             _ => {
-                LOGGER.error(format!("Tensor2d<{}, {}, {}>::select_smaller_than() >> Storage type expection. {} is not supported", R, C, T::type_name(), self.storage().info()));
+                LOGGER.error(format!("{}::{}() >> Storage type expection. {} is not supported",
+                    Self::type_name().green(), "select_smaller_than".yellow(),
+                    self.storage().info()));
                 panic!("")
             }
         }
@@ -131,7 +205,34 @@ impl<const R: usize, const C: usize, T: Dtype> Tensor2d<R, C, T> {
 
     // replace element where mask is true to valeue of "to"
     pub fn replace_scalar_where(&self, mask: &Tensor2d<R, C, bool>, to: T) -> Self {
-        todo!()
+        // &*はRwLockReadGuard<'_, T>を&Tにしている
+        match &*self.storage() {
+            Storage::Densef32(raw) => {
+                let mut new = raw.clone();
+                // ここはわけないとtemporary valueがdropする
+                let bool_storage = mask.storage();
+                let raw_mask = if let Storage::DenseBool(raw) = &*bool_storage {
+                    raw
+                } else {
+                    LOGGER.error(format!("{}::{}() >> mask tensor not have bool but {}",
+                            Self::type_name().green(), "replace_scalar_where".yellow(),
+                            mask.storage().info()));
+                    panic!("")
+                };
+                new.replace_where_to_scalar(raw_mask, to.to_f32().unwrap());
+                Self {
+                    name: "replace_scalar_where".to_string(),
+                    storage: Storage::new_f32(new.body),
+                    _marker: PhantomData,
+                }
+            },
+            _ => {
+                LOGGER.error(format!("{}::{}() >> Storage type expection. {} is not supported",
+                    Self::type_name().green(), "replace_scalar_where".yellow(),
+                    self.storage().info()));
+                panic!("")
+            }
+        }
     }
 
     // replace element where mask is true to value of to: Self
@@ -230,34 +331,7 @@ impl<const R: usize, const C: usize> Tensor2d<R, C, f32> {
         }
     }
 
-    pub fn new_zeros() -> Self {
-        let mut body = Vec::new();
-            for i in 0..R {
-                for j in 0..C {
-                    body.push(0.0);
-                }
-            }
-        let raw_dense = RawDense { body };
-        Self {
-            name: "no_name".to_string(),
-            storage: Arc::new(RwLock::new(Storage::Densef32(raw_dense))),
-            _marker: PhantomData,
-        }
-    }
-    pub fn new_ones() -> Self {
-        let mut body = Vec::new();
-            for i in 0..R {
-                for j in 0..C {
-                    body.push(1.0);
-                }
-            }
-        let raw_dense = RawDense { body };
-        Self {
-            name: "no_name".to_string(),
-            storage: Arc::new(RwLock::new(Storage::Densef32(raw_dense))),
-            _marker: PhantomData,
-        }
-    }
+    
 
     
 }

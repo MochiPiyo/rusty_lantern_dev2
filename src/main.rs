@@ -53,7 +53,8 @@ fn nten_add() {
     ]).name("input2");
 
 
-    let mut vs = VarStore::new();
+    let mut autograd = Autograd::new();
+    let mut vs = autograd.get_vs();
     let nten1 = Nten2d::new_from_val(input1).as_parameter(&mut vs);
     println!("{}", nten1.id);
     let nten2 = Nten2d::new_from_val(input2).as_parameter(&mut vs);
@@ -63,14 +64,13 @@ fn nten_add() {
     println!("{}", output.id);
 
     // forwardだけexecute
-    let mut autograd = Autograd::new(vs);
     let mut result = autograd.step_forward([output.to_untyped()]);
 
     println!("result {:?}", result[0].val);
 
     // backward
     dummy_loss_fn(&mut result[0]);
-    let ctx = autograd.backward(result[0].clone());
+    let ctx = autograd.backward(&result[0]);
     
     println!("grad {:?}", ctx.get_grad(&nten1.id))
     /*
@@ -101,11 +101,11 @@ struct Matmul<const N: usize, const M: usize> {
 impl<const N: usize, const M: usize> Matmul<N, M> {
     fn new(vs: &mut VarStore, val: Tensor2d<N, M, f32>) -> Self {
         Self {
-            parameter: Nten2d::new_from_val(val).as_parameter(vs)
+            parameter: Nten2d::new_from_val(val).name("parameter").as_parameter(vs)
         }
     }
-    fn forward<const I: usize>(&self, input: &Nten2d<I, N, f32>, vs: &mut VarStore) -> Nten2d<I, M, f32> {
-        let result = nten::matmul(input, &self.parameter).as_parameter(vs);
+    fn forward<const I: usize>(&self, input: &Nten2d<I, N, f32>) -> Nten2d<I, M, f32> {
+        let result = nten::matmul(input, &self.parameter);
         result
     }
 }
@@ -113,24 +113,30 @@ fn all_one_loss_fn(result: &mut Nten) {
     result.grad = Some(Tensor::new_ones::<f32>(result.shape));
 }
 fn matmul() {
+    
+    let mut autograd = Autograd::new();
+    let mut vs = autograd.get_vs();
+
+    // create input
     let input_val: Tensor2d<2, 2, f32> = Tensor2d::new_from_martix([
         [1.0, 2.0],
         [3.0, 4.0]
-    ]).name("input1");
-
-    let mut vs = VarStore::new();
-    let input = Nten2d::new_from_val(input_val).as_parameter(&mut vs);
+    ]);
+    let input = Nten2d::new_from_val(input_val).name("input").as_input(&mut vs);
     println!("input id {}", input.id);
 
-    let parameter: Tensor2d<2, 3, f32> = Tensor2d::new_from_martix([
+    // create matmul
+    let parameter_val: Tensor2d<2, 3, f32> = Tensor2d::new_from_martix([
         [1.0, 2.0, 3.0],
         [3.0, 4.0, 5.0]
-    ]).name("parameter");
-    let linear: Matmul<2, 3> = Matmul::new(&mut vs, parameter);
+    ]);
+    let linear: Matmul<2, 3> = Matmul::new(&mut vs, parameter_val);
 
-    let result = linear.forward(&input, &mut vs);
+    // build graph
+    let result = linear.forward(&input);
+    
 
-    let mut autograd = Autograd::new(vs);
+    vs.print_all_contents_id();
     let mut result = autograd.step_forward([result.to_untyped()]);
     println!("{:?}", result[0].val);
     /* 外部で計算した正解の値
@@ -139,7 +145,7 @@ fn matmul() {
     */
     
     all_one_loss_fn(&mut result[0]);
-    let ctx = autograd.backward(result[0].clone());
+    let ctx = autograd.backward(&result[0]);
 
     let param_diff = ctx.get_grad(&linear.parameter.id);
     println!("{:?}", param_diff);
@@ -169,8 +175,8 @@ impl<const I: usize, const O: usize> Linear<I, O> {
         let weight: Tensor2d<I, O, f32> = Tensor2d::new_uniform(-k.sqrt(), k.sqrt());
         let bias: Tensor2d<1, O, f32> = Tensor2d::new_zeros();
         Self {
-            weight: Nten2d::new_from_val(weight).as_parameter(vs),
-            bias: Nten2d::new_from_val(bias).as_parameter(vs),
+            weight: Nten2d::new_from_val(weight).name("Linear weight").as_parameter(vs),
+            bias: Nten2d::new_from_val(bias).name("Linear bias").as_parameter(vs),
         }
     }
     fn forward<const B: usize>(&self, input: &Nten2d<B, I, f32>) -> Nten2d<B, O, f32> {
@@ -208,21 +214,25 @@ fn mnist() {
     let learning_rate: f32 = 0.01;
     let num_epoch: usize = 100;
 
+
+
     // load dataset
-    let train_image_path = "./mnist_data/train-images-idx3-ubyte";
-    let train_label_path = "./mnist_data/train-labels-idx1-ubyte";
+    // gzは解凍されていること
+    let train_image_path = "./mnist_data/train-images.idx3-ubyte";
+    let train_label_path = "./mnist_data/train-labels.idx1-ubyte";
     let (train_images, train_labels): (Vec<[[u8; 28]; 28]>, Vec<u8>)
          = load_minst(train_image_path, train_label_path);
     let train_images: Vec<[u8; 784]> = selialize_minst(&train_images);
     
-    
+    // tools for learning
+    let mut autograd = Autograd::new();
+    let mut vs = autograd.get_vs();
+    let mut optimizer = Sgd::new(learning_rate);
+
     // create model
-    let mut vs = VarStore::new();
     let model: Model<BATCH_SIZE, HIDDEN_SIZE> = Model::new(&mut vs);
 
-    // tools for learning
-    let mut autograd = Autograd::new(vs);
-    let mut optimizer = Sgd::new(learning_rate);
+    
     
     for i in 0..num_epoch {
         // shuffle and make batch
@@ -232,12 +242,18 @@ fn mnist() {
         
         // learn batch
         for (images, labels) in train_image_batches.iter().zip(train_label_batches.iter()) {
-            let images = Nten2d::new_from_val(images.clone());
+            // mark as input !
+            let images = Nten2d::new_from_val(images.clone())
+                .name("input")
+                .as_input(&mut vs);
+
             let graph = model.forward(&images);
+            vs.print_all_contents_id();
             let mut predict = autograd.step_forward([graph.to_untyped()]);
             let loss = loss_fn::softmax_cross_entropy_f32(&mut predict[0], labels.to_untyped());
     
-            let ctx: &mut Context = autograd.backward(predict[0].clone());
+            //println!("{:?}", predict[0].grad);
+            let ctx: &mut Context = autograd.backward(&predict[0]);
             
             // update parameter
             optimizer.update(ctx);
@@ -253,6 +269,7 @@ fn mnist() {
 fn main() {
     //raw_add();
     //nten_add();
-    matmul();
+    //matmul();
+    mnist();
 
 }

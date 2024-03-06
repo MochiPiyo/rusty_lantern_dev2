@@ -84,6 +84,14 @@ impl RawBool {
             self.body[byte_pos] &= !(1 << bit_pos);
         }
     }
+
+    // Iterator method to enable iteration over the RawBool
+    pub fn iter(&self) -> RawBoolIter {
+        RawBoolIter {
+            raw_bool: self,
+            current_index: 0,
+        }
+    }
 }
 
 impl std::ops::Index<usize> for RawBool {
@@ -104,3 +112,36 @@ impl std::ops::Index<usize> for RawBool {
     }
 }
 // IndexAddは1 bitでやるのは難しい。変わりにset_bitがある
+
+
+// Iterator for RawBool
+pub struct RawBoolIter<'a> {
+    raw_bool: &'a RawBool,
+    current_index: usize,
+}
+
+impl<'a> Iterator for RawBoolIter<'a> {
+    type Item = bool;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Check if the current index is within the bounds of the RawBool
+        if self.current_index < self.raw_bool.len {
+            // Calculate byte and bit position
+            let byte_pos = self.current_index / 8;
+            let bit_pos = self.current_index % 8;
+
+            // Access the byte and get the bit at the current index
+            let byte = self.raw_bool.body[byte_pos];
+            let bit_value = (byte >> bit_pos) & 1;
+
+            // Increment the current index for the next iteration
+            self.current_index += 1;
+
+            // Return the boolean value of the bit
+            Some(bit_value != 0)
+        } else {
+            // If the current index is out of bounds, return None to indicate the end of the iteration
+            None
+        }
+    }
+}

@@ -1,15 +1,15 @@
 
 use std::fmt;
 
-use crate::{autograd::Context, nten::NtenID};
+use crate::{autograd::Context, nten::{Nten, NtenID}};
 
 // reference impl
 mod add;
 pub use add::Add2d;
 
 
-mod add_broadcst;
-pub use add_broadcst::AddBroadcast2d;
+mod add_broadcast;
+pub use add_broadcast::AddBroadcast2d;
 mod matmul;
 pub use matmul::Matmul;
 pub mod relu;
@@ -24,14 +24,13 @@ pub trait FnEdge {
     // 計算グラフ構築用
     fn get_id(&self) -> FnEdgeID;
     fn sources(&self) -> Vec<Box<dyn FnEdge>>;
-    fn inputs(&self) -> Vec<NtenID>; // ctxにNtenをビルド時に予め作成しておくため
     fn clone_box(&self) -> Box<dyn FnEdge>;
     // 計算実行用
     fn forward(&self, ctx: &mut Context);
     fn backward(&self, ctx: &mut Context);
 
     // デバック
-    //fn name(&self) -> String;
+    fn name(&self) -> String;
 }
 // Implement Clone for Box<dyn FnEdge> using the clone_box method
 impl Clone for Box<dyn FnEdge> {
@@ -71,18 +70,16 @@ impl FnEdge for DummyFnEdge {
     fn get_id(&self) -> FnEdgeID {
         self.id
     }
+    fn name(&self) -> String {
+        "DymmyFnEdge".to_string()
+    }
     fn sources(&self) -> Vec<Box<dyn FnEdge>> {
         // this must return vec of nothing for stop graph walk in making tape stage
         vec![]
     }
-    fn inputs(&self) -> Vec<NtenID> {
-        vec![]
-    }
     fn forward(&self, ctx: &mut Context) {
-        println!("you executed DummyFnEdge.forward()");
     }
     fn backward(&self, ctx: &mut Context) {
-        println!("you executed DummyFnEdge.backward() you may run backward while using Mode::Inference");
     }
     fn clone_box(&self) -> Box<dyn FnEdge> {
         Box::new(self.clone())
@@ -104,17 +101,16 @@ impl FnEdge for HumanCreatedFnEdge {
     fn get_id(&self) -> FnEdgeID {
         self.id
     }
+    fn name(&self) -> String {
+        "HumanCreatedFnEdge".to_string()
+    }
     fn sources(&self) -> Vec<Box<dyn FnEdge>> {
         vec![]
     }
-    fn inputs(&self) -> Vec<NtenID> {
-        vec![]
-    }
     fn forward(&self, ctx: &mut Context) {
-        println!("you executed DummyFnEdge.forward()");
+        //ctx.varstore.print_all_contents_id();
     }
     fn backward(&self, ctx: &mut Context) {
-        println!("you executed DummyFnEdge.backward() you may run backward while using Mode::Inference");
     }
     fn clone_box(&self) -> Box<dyn FnEdge> {
         Box::new(self.clone())

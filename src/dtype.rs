@@ -1,6 +1,8 @@
 use std::fmt::{format, Debug, Display, Formatter};
 
 
+
+
 // トレイト'staticは内部に参照を含まないことを保証する
 pub trait Dtype: Copy + Debug + PartialOrd + Sized + 'static {
     /*
