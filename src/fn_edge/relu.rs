@@ -3,39 +3,21 @@ use crate::{autograd::Context, dtype::{Dtype, Shape}, logger::LOGGER, nten::{get
 use super::{get_new_fn_edge_id, FnEdge, FnEdgeID};
 
 
-// とりあえず2dを使う。
-pub fn relu<const N: usize, T: Dtype>(nten: Nten2d<1, N>) -> Nten2d<1, N> {
-    let new_id = get_new_nten_id(false);
-    let relu = Relu::<N, T> {
-        id: get_new_fn_edge_id(),
-        name: format!("Relu<{}, {}>", N, T::type_name()),
-        sources: vec![nten.creator],
-        input_id: nten.id,
-        output_id: new_id,
-        _marker: PhantomData,
-    };
-    Nten2d {
-        id: new_id,
-        name: format!("auto created by Relu<{}, {}>", N, T::type_name()),
-        creator: Box::new(relu),
-        val: None,
-        grad: None,
-        _marker: PhantomData,
-    }
-}
+
 
 #[derive(Clone)]
-pub struct Relu<const N: usize, T> {
+pub struct Relu2d<const R: usize, const C: usize, T> {
     pub id: FnEdgeID,
     pub name: String,
     pub sources: Vec<Box<dyn FnEdge>>,
 
     pub input_id: NtenID,
     pub output_id: NtenID,
+    pub mask_cach_id: NtenID,
 
-    _marker: PhantomData<T>
+    pub _marker: PhantomData<T>
 }
-impl<const N: usize, T: Dtype> FnEdge for Relu<N, T> {
+impl<const R: usize, const C: usize, T: Dtype> FnEdge for Relu2d<R, C, T> {
     fn get_id(&self) -> super::FnEdgeID {
         self.id
     }
@@ -53,10 +35,24 @@ impl<const N: usize, T: Dtype> FnEdge for Relu<N, T> {
     }
 
     fn forward(&self, ctx: &mut crate::autograd::Context) {
-        todo!()
+        LOGGER.debug(format!("Relu2d<{},{},{}> forward", R, C, T::type_name()));
+        let input: Tensor2d<R, C, T> = ctx.get_val_as_2d(&self.input_id);
+
+        let mask: Tensor2d<R, C, bool> = input.select_smaller_than(T::from_f32(0.0));
+        ctx.insert_tensor(&self.mask_cach_id, mask.to_untyped());
+
+        let output: Tensor2d<R, C, T> = input.replace_scalar_where(&mask, T::from_f32(0.0));
+
+        ctx.insert_val(&self.output_id, output.to_untyped());
     }
 
     fn backward(&self, ctx: &mut crate::autograd::Context) {
-        todo!()
+        LOGGER.debug(format!("Relu2d<{},{},{}> backward", R, C, T::type_name()));
+        let din: Tensor2d<R, C, T> = ctx.get_val_as_2d(&self.output_id);
+
+        let mask: Tensor2d<R, C, bool> = ctx.get_tensor_as_2d(&self.mask_cach_id);
+        let dout: Tensor2d<R, C, T> = din.replace_scalar_where(&mask, T::from_f32(0.0));
+
+        ctx.insert_val(&self.output_id, dout.to_untyped());
     }
 }

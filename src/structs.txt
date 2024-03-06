@@ -1,0 +1,42 @@
+
+
+pub struct RawDense<T> {
+    // we don't need shape check because we invoke fn that impled this RawDense<T> only from Typed Tensor (front data type).
+
+    // actual data
+    // array[2][2] == [[a, b], 
+    //                 [c, d]] 
+    // -> vec![a, b, c, d]
+    pub(crate) body: Vec<T>,
+}
+
+pub enum Storage {
+    None, // if deleted
+
+    DenseBool(RawBool),
+
+    // candle have: u8, u32, i64, bf16, f16, f32, f64
+    Densef32(RawDense<f32>), // we shold not use T here not to use generic parameter
+    // Sparse32(..),
+    // Gpu32(..),
+}
+pub enum Shape {
+    D1(usize),
+    D2(usize, usize),
+}
+pub struct Tensor {
+    pub name: String,
+    pub shape: Shape,
+    // dtype
+    pub storage: Arc<RwLock<Storage>>,
+}
+
+pub struct Nten {
+    pub id: NtenID,
+    pub name: String,
+    pub creator: Box<dyn FnEdge>,
+
+    pub shape: Shape,
+    pub val: Option<Tensor>,
+    pub grad: Option<Tensor>,
+}

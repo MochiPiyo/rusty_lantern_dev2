@@ -36,8 +36,8 @@ impl<const N: usize, const M: usize, const O: usize, T: Dtype> FnEdge for Matmul
 
 
     fn forward(&self, ctx: &mut Context) {
-        let lhs: Tensor2d<N, M, T> = ctx.get_val(&self.lhs_id).to_typed2d().unwrap();
-        let rhs: Tensor2d<M, O, T> = ctx.get_val(&self.rhs_id).to_typed2d().unwrap();
+        let lhs: Tensor2d<N, M, T> = ctx.get_val_as_2d(&self.lhs_id);
+        let rhs: Tensor2d<M, O, T> = ctx.get_val_as_2d(&self.rhs_id);
 
         let out = tensor::matmul(&lhs, &rhs);
 
@@ -45,10 +45,10 @@ impl<const N: usize, const M: usize, const O: usize, T: Dtype> FnEdge for Matmul
     }
 
     fn backward(&self, ctx: &mut Context) {
-        let lhs: Tensor2d<N, M, T> = ctx.get_val(&self.lhs_id).to_typed2d().unwrap();
-        let rhs: Tensor2d<M, O, T> = ctx.get_val(&self.rhs_id).to_typed2d().unwrap();
+        let lhs: Tensor2d<N, M, T> = ctx.get_val_as_2d(&self.lhs_id);
+        let rhs: Tensor2d<M, O, T> = ctx.get_val_as_2d(&self.rhs_id);
 
-        let din: Tensor2d<N, O, T> = ctx.get_grad(&self.output_id).to_typed2d().unwrap();
+        let din: Tensor2d<N, O, T> = ctx.get_grad_as_2d(&self.output_id);
 
         let dlhs = tensor::matmul(&din, &rhs.transpose());
         let drhs = tensor::matmul(&lhs.transpose(), &din);

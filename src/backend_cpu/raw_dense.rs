@@ -1,7 +1,9 @@
 use rayon::prelude::*;
-use std::{fmt::Debug, ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign}, sync::Mutex};
+use std::{fmt::Debug, ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign}, sync::Mutex, thread::panicking};
 
-use crate::{dtype::Shape, machine_config::MACHINE_CONFIG};
+use crate::{dtype::Shape, logger::LOGGER, machine_config::MACHINE_CONFIG};
+
+use super::RawBool;
 
 
 // todo!
@@ -26,7 +28,6 @@ pub struct RawDense<T> {
 
 impl RawDense<f32>
 {
-
     pub fn matmul(lhs: &Self, lhs_shape: Shape, rhs: &Self, rhs_shape: Shape) -> RawDense<f32> {
         match (lhs_shape, rhs_shape) {
             (Shape::D2(lhs_rows, lhs_cols), Shape::D2(rhs_rows, rhs_cols)) if lhs_cols == rhs_rows => {
@@ -46,13 +47,69 @@ impl RawDense<f32>
         }
     }
 
-    pub fn transpose(&self, shape: Shape) -> Self {
+    pub fn mul_scalar(&mut self, scalar: f32) -> &mut Self {
+        self.body.iter_mut().map(|i| *i * scalar);
+        self
+    }
+
+    pub fn div_scalar(&mut self, scalar: f32) -> &mut Self {
+        self.body.iter_mut().map(|i| *i / scalar);
+        self
+    }
+
+    pub fn add_broadcast(&mut self, bias: &Self, shape: Shape) -> &mut Self {
+        if let Shape::D2(row_num, col_num) = shape {
+            if bias.body.len() != col_num {
+                LOGGER.error(format!("RawDense<f32>.add_broadcast() >> shape unmatched extected {}, but bias: {}", col_num, bias.body.len()));
+                panic!("");
+            }
+
+            for chunk in self.body.chunks_mut(bias.body.len()) {
+                for (i, j) in chunk.iter_mut().zip(bias.body.iter()) {
+                    *i += *j;
+                }
+            }
+        } else {
+            LOGGER.error(format!("RawDense<f32>.add_broadcast() >> Shape is not Shape::D2 but {}", shape.to_string()));
+            panic!("");
+        }
+        self
+    }
+
+    pub fn select_larger_than(&self, condition: f32) -> RawBool {
+        let mut bools = RawBool::new();
+        for i in self.body.iter() {
+            if *i > condition {
+                bools.push(true);
+            } else {
+                bools.push(false);
+            }
+        }
+        bools
+    }
+
+    pub fn select_smaller_than(&self, condition: f32) -> RawBool {
+        let mut bools = RawBool::new();
+        for i in self.body.iter() {
+            if *i < condition {
+                bools.push(true);
+            } else {
+                bools.push(false);
+            }
+        }
+        bools
+    }
+
+    pub fn replace_where_to_scalar(&mut self, to: f32) {
+
+    }
+
+    
+    pub fn transpose(&mut self, shape: Shape) {
         match shape {
             Shape::D1(_) => {
                 // For a 1D array, the transpose is the same as the original
-                RawDense {
-                    body: self.body.clone(),
-                }
+                return
             }
             Shape::D2(rows, cols) => {
                 let mut transposed_body = Vec::with_capacity(self.body.len());
@@ -61,9 +118,7 @@ impl RawDense<f32>
                         transposed_body.push(self.body[row * cols + col].clone());
                     }
                 }
-                RawDense {
-                    body: transposed_body,
-                }
+                self.body = transposed_body;
             }
         }
     }

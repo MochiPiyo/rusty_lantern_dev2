@@ -1,6 +1,6 @@
 
 
-use std::fmt::Debug;
+use std::{fmt::Debug, sync::{Arc, RwLock}};
 
 use crate::{backend_cpu::{RawBool, RawDense}, dtype::Shape, logger::LOGGER};
 
@@ -27,6 +27,13 @@ pub enum Storage {
 }
 // Noneで穴あきになると、epoch回す前にデフラグする必要がありそうだ。
 impl Storage {
+    pub fn new_f32(body: Vec<f32>) -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(Self::Densef32(RawDense { body })))
+    }
+    pub fn new_bools(body: Vec<u8>, len: usize) -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(Self::DenseBool(RawBool { body, len })))
+    }
+
     // for count parameter num in GraphBuilder's parameter: Vec<RawData>
     pub fn parameter_num(&self) -> usize {
         todo!()
@@ -54,26 +61,6 @@ impl Storage {
         }
     }
 
-    pub fn transpose(&self, shape: Shape) -> Self {
-        match shape {
-            Shape::D2(_, _) => {
-                
-            },
-            _ => LOGGER.debug(format!("Storage::transpose() >> you execute transpose for shape: {}", shape.to_string()))
-        }
-        match self {
-            Self::Densef32(raw) => {
-                Self::Densef32(raw.transpose(shape))
-            },
-            Self::DenseBool(raw) => {
-                todo!()
-            }
-            _ => {
-                LOGGER.error(format!("Storage::transpose() >> Storage type expection. self is {}", self.info()));
-                panic!("")
-            },
-        }
-    }
 }
 impl Debug for Storage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

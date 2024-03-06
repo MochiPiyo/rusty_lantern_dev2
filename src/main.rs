@@ -2,70 +2,26 @@ use std::sync::Arc;
 
 use autograd::{Autograd, VarStore};
 use dtype::Dtype;
+use load_mnist::{load_minst, shuffle_and_make_batch};
 //use optimizer::Sgd;
 use tensor::{Tensor, Tensor2d};
 use nten::{Nten, Nten2d};
+
+use crate::{autograd::Context, load_mnist::selialize_minst, optimizer::{Optimizer, Sgd}};
 
 
 mod tensor;
 mod backend_cpu;
 mod fn_edge;
+mod loss_fn;
 mod nten;
-//mod optimizer;
+mod optimizer;
 mod autograd;
 mod dtype;
 mod logger;
 mod machine_config;
 
 mod load_mnist;
-
-/*
-struct Model {
-    parameter: Tensor2d<2, 2, f32>,
-}
-impl Model {
-    fn new() -> Self {
-        Self {
-            parameter: Nten2d::new_from_martix([
-                [5.0, 6.0],
-                [7.0, 8.0]
-            ]).as_parameter().name("parameter"),
-        }
-    }
-    fn forward(&self, input: &Nten2d<2, 2, f32>) -> Nten2d<2, 2, f32> {
-        println!("y");
-        let result = self.parameter.add(input);
-        println!("y");
-        return result;
-    }
-}
-
-
-
-
-fn add_grad() {
-    let model = Model::new();
-
-    let autograd = Autograd::new();
-    let lr = 0.01;
-    let optimizer = Sgd::new(lr);
-    
-
-    for _ in 0..1 {
-        let input: Tensor2d<2, 2, f32> = Tensor2d::new_from_martix([
-            [1.0, 2.0],
-            [3.0, 4.0]
-        ]).name("input");
-
-        let graph = model.forward(&input);
-        let mut result = autograd.step_forward(vec![graph.to_untyped()]).name("result");
-        dummy_loss_fn(&mut result);
-
-        let context = autograd.backward(result);
-        optimizer.update(context);
-    }
-}
-*/
 
 
 fn raw_add() {
@@ -139,10 +95,10 @@ fn nten_add() {
 }
 
 
-struct Linear<const N: usize, const M: usize> {
+struct Matmul<const N: usize, const M: usize> {
     pub parameter: Nten2d<N, M, f32>,
 }
-impl<const N: usize, const M: usize> Linear<N, M> {
+impl<const N: usize, const M: usize> Matmul<N, M> {
     fn new(vs: &mut VarStore, val: Tensor2d<N, M, f32>) -> Self {
         Self {
             parameter: Nten2d::new_from_val(val).as_parameter(vs)
@@ -156,7 +112,7 @@ impl<const N: usize, const M: usize> Linear<N, M> {
 fn all_one_loss_fn(result: &mut Nten) {
     result.grad = Some(Tensor::new_ones::<f32>(result.shape));
 }
-fn linear() {
+fn matmul() {
     let input_val: Tensor2d<2, 2, f32> = Tensor2d::new_from_martix([
         [1.0, 2.0],
         [3.0, 4.0]
@@ -170,7 +126,7 @@ fn linear() {
         [1.0, 2.0, 3.0],
         [3.0, 4.0, 5.0]
     ]).name("parameter");
-    let linear: Linear<2, 3> = Linear::new(&mut vs, parameter);
+    let linear: Matmul<2, 3> = Matmul::new(&mut vs, parameter);
 
     let result = linear.forward(&input, &mut vs);
 
@@ -201,14 +157,102 @@ fn linear() {
 }
 
 
-struct Mnist {
-
+struct Linear<const I: usize, const O: usize> {
+    weight: Nten2d<I, O, f32>,
+    bias: Nten2d<1, O, f32>,
 }
+impl<const I: usize, const O: usize> Linear<I, O> {
+    fn new(vs: &mut VarStore) -> Self {
+        // pytorchと同じ初期化
+        // U(-\sqrt{k}, \sqrt{k}), k = 1 / 入力特徴数
+        let k: f32 = 1.0 / I as f32;
+        let weight: Tensor2d<I, O, f32> = Tensor2d::new_uniform(-k.sqrt(), k.sqrt());
+        let bias: Tensor2d<1, O, f32> = Tensor2d::new_zeros();
+        Self {
+            weight: Nten2d::new_from_val(weight).as_parameter(vs),
+            bias: Nten2d::new_from_val(bias).as_parameter(vs),
+        }
+    }
+    fn forward<const B: usize>(&self, input: &Nten2d<B, I, f32>) -> Nten2d<B, O, f32> {
+        // グラフ構築層
+        let out: Nten2d<B, O, f32> = nten::matmul(&input, &self.weight);
+        // batch first
+        out.add_broadcast(&self.bias)
+    }
+}
+
+// B: batch, H: hidden
+struct Model<const B: usize, const H: usize> {
+    linear1: Linear<784, H>,
+    linear2: Linear<H, 10>,
+}
+impl<const B: usize, const H: usize> Model<B, H> {
+    fn new(vs: &mut VarStore) -> Self {
+        Self {
+            linear1: Linear::new(vs),
+            linear2: Linear::new(vs),
+        }
+    }
+    fn forward(&self, input: &Nten2d<B, 784, f32>) -> Nten2d<B, 10, f32> {
+        // layer層の操作
+        let x: Nten2d<B, H, f32> = self.linear1.forward(input);
+        let x: Nten2d<B, H, f32> = x.relu();
+        let x: Nten2d<B, 10, f32> = self.linear2.forward(&x);
+        // return x
+        x
+    }
+}
+fn mnist() {
+    const BATCH_SIZE: usize = 64;
+    const HIDDEN_SIZE: usize = 200;
+    let learning_rate: f32 = 0.01;
+    let num_epoch: usize = 100;
+
+    // load dataset
+    let train_image_path = "./mnist_data/train-images-idx3-ubyte";
+    let train_label_path = "./mnist_data/train-labels-idx1-ubyte";
+    let (train_images, train_labels): (Vec<[[u8; 28]; 28]>, Vec<u8>)
+         = load_minst(train_image_path, train_label_path);
+    let train_images: Vec<[u8; 784]> = selialize_minst(&train_images);
+    
+    
+    // create model
+    let mut vs = VarStore::new();
+    let model: Model<BATCH_SIZE, HIDDEN_SIZE> = Model::new(&mut vs);
+
+    // tools for learning
+    let mut autograd = Autograd::new(vs);
+    let mut optimizer = Sgd::new(learning_rate);
+    
+    for i in 0..num_epoch {
+        // shuffle and make batch
+        let (train_image_batches,
+            train_label_batches): (Vec<Tensor2d<BATCH_SIZE, 784, f32>>, Vec<Tensor2d<BATCH_SIZE, 10, f32>>)
+             = shuffle_and_make_batch(&train_images, &train_labels);
+        
+        // learn batch
+        for (images, labels) in train_image_batches.iter().zip(train_label_batches.iter()) {
+            let images = Nten2d::new_from_val(images.clone());
+            let graph = model.forward(&images);
+            let mut predict = autograd.step_forward([graph.to_untyped()]);
+            let loss = loss_fn::softmax_cross_entropy_f32(&mut predict[0], labels.to_untyped());
+    
+            let ctx: &mut Context = autograd.backward(predict[0].clone());
+            
+            // update parameter
+            optimizer.update(ctx);
+    
+            autograd.zero_grad();
+        }
+    }
+}
+
+
 
 
 fn main() {
     //raw_add();
     //nten_add();
-    linear();
+    matmul();
 
 }

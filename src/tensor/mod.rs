@@ -1,6 +1,6 @@
 
-mod tensor2d_matmul;
-pub use tensor2d_matmul::matmul;
+mod matmul;
+pub use matmul::matmul;
 mod storage;
 pub use storage::*;
 mod tensor2d;

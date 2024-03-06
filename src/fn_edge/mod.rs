@@ -3,13 +3,17 @@ use std::fmt;
 
 use crate::{autograd::Context, nten::NtenID};
 
+// reference impl
 mod add;
 pub use add::Add2d;
 
+
+mod add_broadcst;
+pub use add_broadcst::AddBroadcast2d;
 mod matmul;
 pub use matmul::Matmul;
-mod relu;
-pub use relu::Relu;
+pub mod relu;
+pub use relu::Relu2d;
 
 
 

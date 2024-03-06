@@ -1,22 +1,22 @@
-use std::{marker::PhantomData, sync::{Arc, RwLock}};
+use std::{marker::PhantomData, sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard}};
 
-use crate::{backend_cpu::RawDense, dtype::{Dtype, Shape}};
+use crate::{backend_cpu::RawDense, dtype::{Dtype, Shape}, logger::LOGGER, main};
 
-use super::{Tensor2d, Storage};
+use super::{storage, Storage, Tensor2d};
 
 #[derive(Clone, Debug)]
 pub struct Tensor {
     pub name: String,
     pub shape: Shape,
     // dtype
-    pub storage: Arc<Storage>,
+    pub storage: Arc<RwLock<Storage>>,
 }
 impl Tensor {
     pub fn new_empty() -> Self {
         Self {
             name: "created by Tensor::new_empty".to_string(),
             shape: Shape::D1(0),
-            storage: Arc::new(Storage::None),
+            storage: Arc::new(RwLock::new(Storage::None)),
         }
     }
 
@@ -25,21 +25,26 @@ impl Tensor {
             Shape::D1(n) => Self {
                 name: "ones".to_string(),
                 shape,
-                storage: Arc::new(Storage::Densef32(RawDense { body: vec![1.0_f32;n] }))
+                storage: Arc::new(RwLock::new(Storage::Densef32(RawDense { body: vec![1.0_f32;n] })))
             },
             Shape::D2(n, m) => Self {
                 name: "ones".to_string(),
                 shape,
-                storage: Arc::new(Storage::Densef32(RawDense { body: vec![1.0_f32;n * m] }))
+                storage: Arc::new(RwLock::new(Storage::Densef32(RawDense { body: vec![1.0_f32;n * m] })))
             }
         }
     }
 
-    pub fn storage(&self) -> Arc<Storage> {
-        self.storage.clone()
+    pub fn storage(&self) -> RwLockReadGuard<'_, Storage> {
+        self.storage.read().unwrap()
     }
+    /* あぶないのでOptimiaer以外で使用禁止。実装もそっちにある
+    pub fn storage_mut(&self) -> RwLockWriteGuard<'_, Storage> {
+        self.storage.write().unwrap()
+    }
+    */
 
-    pub fn to_typed2d<const R: usize, const C: usize, T: Dtype>(&mut self) -> Result<Tensor2d<R, C, T>, String> {
+    pub fn to_typed2d<const R: usize, const C: usize, T: Dtype>(&self) -> Result<Tensor2d<R, C, T>, String> {
         if let Shape::D2(r, c) = self.shape {
             if r == R && c == C {
                 Ok(Tensor2d::<R, C, T> {
@@ -67,7 +72,59 @@ impl Tensor {
         Ok(Self {
             name: "added".to_string(),
             shape: self.shape.clone(),
-            storage: Arc::new(&*self.storage() + &*other.storage()),
+            storage: Arc::new(RwLock::new(&*self.storage() + &*other.storage())),
         })
+    }
+
+    pub fn add_batch(&self) -> Self {
+        // &*はRwLockReadGuard<'_, T>を&Tにしている
+        let (body, col_num) = match &*self.storage() {
+            Storage::Densef32(raw_dense) => {
+                match self.shape {
+                    Shape::D2(row_num, col_num) => {
+                        let mut body = vec![0.0; col_num];
+                        for r in 0..row_num {
+                            for c in 0..col_num {
+                                body[c] += raw_dense.body[r * col_num + c];
+                            }
+                        }
+                        (body, col_num)
+                    },
+                    _ => {
+                        LOGGER.error(format!("Tensor::add_batch() >> shape expection. shape is {}", self.shape.to_string()));
+                        panic!("")
+                    }
+                }
+            },
+            _ => {
+                LOGGER.error(format!("Tensor::add_batch() >> Storage type expection. self is {}", self.storage().info()));
+                panic!("")
+            },
+        };
+        Self {
+            name: "add_batch".to_string(),
+            shape: Shape::D1(col_num),
+            storage: Storage::new_f32(body),
+        }
+    }
+
+    // inplaceなのでmutにしてある（implaceはFnEdge内で使用禁止だが，これはOptimizerで使う）
+    pub fn mul_scalar(&self, scalar: f32) -> Self {
+        let new = match &*self.storage() {
+            Storage::Densef32(raw_dense) => {
+                let mut new = raw_dense.clone();
+                new.mul_scalar(scalar);
+                new
+            },
+            _ => {
+                LOGGER.error(format!("Tensor::mul_scalar() >> Storage type expection. self is {}", self.storage().info()));
+                panic!("")
+            },
+        };
+        Self {
+            name: self.name.clone(),
+            shape: self.shape,
+            storage: Storage::new_f32(new.body),
+        }
     }
 }  

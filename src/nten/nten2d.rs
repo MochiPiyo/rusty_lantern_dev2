@@ -1,10 +1,10 @@
-use std::{marker::PhantomData};
+use std::marker::PhantomData;
 
-use crate::{autograd::VarStore, dtype::{Dtype, Shape}, fn_edge::{get_new_fn_edge_id, Add2d, FnEdge, HumanCreatedFnEdge}, tensor::Tensor2d};
+use crate::{autograd::VarStore, dtype::{Dtype, Shape}, fn_edge::{get_new_fn_edge_id, Add2d, AddBroadcast2d, FnEdge, HumanCreatedFnEdge}, logger::LOGGER, tensor::Tensor2d};
 
-use super::{get_new_nten_id, Nten, NtenID};
+use super::{get_new_nten_id, relu::Relu2d, Nten, NtenID};
 
-pub struct Nten2d<const R: usize, const C: usize, T=f32> {
+pub struct Nten2d<const R: usize, const C: usize, T> {
     pub id: NtenID,
     pub name: String,
     pub creator: Box<dyn FnEdge>,
@@ -49,39 +49,28 @@ impl<const R: usize, const C: usize, T: Dtype> Nten2d<R, C, T> {
         }
     }
 
+    pub fn type_name(&self) -> String {
+        format!("Nten2d<{}, {}, {}>", R, C, T::type_name())
+    }
+
     
     pub fn as_parameter(mut self, vs: &mut VarStore) -> Self {
-        let mut val_untyped = if let Some(val) = self.val {
-            Some(val.to_untyped())
+        let val_clone = if let Some(val) = self.val.take() {
+            // valの内部はArcで実体を保持しているのでcloneしてよい
+            val.clone()
         } else {
-            None
+            LOGGER.error(format!("{} as_parameter() >> nten id: {}, name: {} self.val is None.
+                 parameter val must have Some.", self.type_name(), self.id, self.name));
+            panic!();
         };
-        let mut grad_untyped = if let Some(grad) = self.grad {
-            Some(grad.to_untyped())
-        } else {
-            None
-        };
-
-        let clone_move_data = Nten {
-            id: self.id.clone(),
-            name: self.name.clone(),
-            creator: self.creator.clone(),
-            shape: Shape::D2(R, C),
-            // Option::takeは所有権を移動させて元のOptionをNoneにする
-            val: val_untyped.take(),
-            grad: grad_untyped.take(),
-        };
-
-        vs.resister(clone_move_data);
-
-        Nten2d::<R, C, T> {
-            id: self.id,
-            name: self.name,
-            creator: self.creator,
-            val: None,
-            grad: None,
-            _marker: PhantomData,
+        if let Some(_) = self.grad {
+            LOGGER.warning(format!("{} as_parameter() >> nten id: {}, name: {} expected grad is None but has some. 
+                you may forgot clear grad or reuse nten in iteration.", self.type_name(), self.id, self.name));
         }
+        let to_resistor = Nten2d::new_from_val(val_clone);
+        vs.resister_parameter(to_resistor.to_untyped());
+
+        self
     }
 
     pub fn add(&self, other: &Self) -> Self {
@@ -99,6 +88,49 @@ impl<const R: usize, const C: usize, T: Dtype> Nten2d<R, C, T> {
             id: new_id,
             name: "add2d".to_string(),
             creator: Box::new(add2d),
+            val: None,
+            grad: None,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn add_broadcast(&self, bias: &Nten2d<1, C, T>) -> Self {
+        let new_id = get_new_nten_id(false);
+        let fn_edge = AddBroadcast2d::<R, C, T> {
+            id: get_new_fn_edge_id(),
+            name: format!("auto created by Add2d<{}, {}, {}>", R, C, T::type_name()),
+            sources: vec![self.creator.clone(), bias.creator.clone()],
+            input1_id: self.id,
+            input2_id: bias.id,
+            output_id: new_id,
+            _marker: PhantomData,
+        };
+        Self {
+            id: new_id,
+            name: "add broadcast".to_string(),
+            creator: Box::new(fn_edge),
+            val: None,
+            grad: None,
+            _marker: PhantomData,
+        }
+    }
+
+    
+    pub fn relu(&self) -> Nten2d<R, C, T> {
+        let new_id = get_new_nten_id(false);
+        let relu = Relu2d::<R, C, T> {
+            id: get_new_fn_edge_id(),
+            name: format!("Relu2d<{}, {}, {}>", R, C, T::type_name()),
+            sources: vec![self.creator.clone()],
+            input_id: self.id,
+            output_id: new_id,
+            mask_cach_id: get_new_nten_id(false),
+            _marker: PhantomData,
+        };
+        Nten2d {
+            id: new_id,
+            name: format!("auto created by Relu<{}, {}, {}>", R, C, T::type_name()),
+            creator: Box::new(relu),
             val: None,
             grad: None,
             _marker: PhantomData,

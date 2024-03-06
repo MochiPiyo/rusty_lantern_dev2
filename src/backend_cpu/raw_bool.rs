@@ -5,8 +5,8 @@ use std::fmt::{self, Debug};
 // store bool as 1 bit not 1 Byte
 #[derive(Clone, PartialEq)]
 pub struct RawBool {
-    len: usize,
-    body: Vec<u8>,
+    pub len: usize,
+    pub body: Vec<u8>,
 }
 impl Debug for RawBool {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -31,7 +31,7 @@ impl RawBool {
         }
     }
     
-    pub fn new_with_capacity(capacity: usize) -> Self {
+    pub fn with_capacity(capacity: usize) -> Self {
         // when capacity % 8 == 0, there is a extra 8 bit but it's not so big
         let bool_capacity = capacity / 8 + 1;
         Self {
@@ -65,6 +65,25 @@ impl RawBool {
         }
         raw_bool
     }
+
+    // Sets the value of a bit at a specific index.
+    pub fn set_bit(&mut self, index: usize, value: bool) {
+        let byte_pos = index / 8;
+        let bit_pos = index % 8;
+
+        // Ensure the byte_pos is within the bounds of the Vec.
+        if byte_pos >= self.body.len() {
+            panic!("RawDense set_bit() >> Index '{}' is out of bounds '{}'.", index, self.len);
+        }
+
+        if value {
+            // Set the bit to 1.
+            self.body[byte_pos] |= 1 << bit_pos;
+        } else {
+            // Set the bit to 0.
+            self.body[byte_pos] &= !(1 << bit_pos);
+        }
+    }
 }
 
 impl std::ops::Index<usize> for RawBool {
@@ -84,3 +103,4 @@ impl std::ops::Index<usize> for RawBool {
         unsafe { &*(bit_value as *const u8 as *const bool) }
     }
 }
+// IndexAddは1 bitでやるのは難しい。変わりにset_bitがある

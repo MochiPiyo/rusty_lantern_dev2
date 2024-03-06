@@ -11,6 +11,7 @@ mod nten2d;
 pub use nten2d::Nten2d;
 
 
+pub use crate::fn_edge::relu;
 
 #[derive(Eq, Hash, PartialEq, Clone, Copy)]
 pub struct NtenID(pub i32);

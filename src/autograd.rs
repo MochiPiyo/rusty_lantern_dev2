@@ -1,16 +1,18 @@
-use std::{collections::{HashMap, HashSet}, fmt::format};
+use std::collections::{HashMap, HashSet};
 
 use crate::{
-    fn_edge::{DummyFnEdge, FnEdge, FnEdgeID, HumanCreatedFnEdge}, logger::LOGGER, nten::{self, Nten, NtenID, NtenTrait}, tensor::Tensor
+    dtype::Dtype, fn_edge::{FnEdge, FnEdgeID}, logger::LOGGER, nten::{Nten, NtenID}, tensor::{Tensor, Tensor2d}
 };
 
 pub struct VarStore {
     pub(crate) body: HashMap<NtenID, Nten>,
+    pub parameter_ids: HashSet<NtenID>,
 }
 impl VarStore {
     pub fn new() -> Self {
         Self {
             body: HashMap::new(),
+            parameter_ids: HashSet::new(),
         }
     }
 
@@ -25,17 +27,22 @@ impl VarStore {
         self.body.get_mut(id)
     }
 
-    pub fn resister(&mut self, nten: Nten) {
+    pub fn resister_parameter(&mut self, nten: Nten) {
+        self.parameter_ids.insert(nten.id);
         self.body.insert(nten.id, nten);
     }
 }
 
 pub struct Context {
     pub varstore: VarStore,
+    temp_tensors: HashMap<NtenID, Tensor>,
 }
 impl Context {
     pub fn new(vs: VarStore) -> Self {
-        Self { varstore: vs }
+        Self {
+            varstore: vs,
+            temp_tensors: HashMap::new(),
+        }
     }
 
     pub fn remove_nten(&mut self, id: &NtenID) -> Result<Nten, String> {
@@ -47,7 +54,10 @@ impl Context {
     }
     pub fn insert_nten(&mut self, new_nten: Nten) {
         if let Some(existing_nten) = self.varstore.get_mut(&new_nten.id) {
-            LOGGER.debug(format!("nten id: {} is already exists in ctx. value has overrided", new_nten.id));
+            LOGGER.debug(format!(
+                "nten id: {} is already exists in ctx. value has overrided",
+                existing_nten.id
+            ));
             self.varstore.body.insert(new_nten.id, new_nten);
         } else {
             self.varstore.body.insert(new_nten.id, new_nten);
@@ -67,10 +77,35 @@ impl Context {
         }
     }
 
+    pub fn get_val_as_2d<const R: usize, const C: usize, T: Dtype>(&self, id: &NtenID) -> Tensor2d<R, C, T> {
+        if let Some(nten) = self.varstore.body.get(id) {
+            if let Some(val) = &nten.val {
+                // TensorはstoreageがArcでほかがnameとshapeなのでクローンしてよい。
+                val.to_typed2d().unwrap()
+            } else {
+                panic!("val of Nten id: {} is None", id);
+            }
+        } else {
+            panic!("Nten id: {} not found in Context", id);
+        }
+    }
+
     pub fn get_grad(&self, id: &NtenID) -> Tensor {
         if let Some(nten) = self.varstore.body.get(id) {
             if let Some(grad) = &nten.grad {
                 grad.clone()
+            } else {
+                panic!("grad of Nten id: {} is None", id);
+            }
+        } else {
+            panic!("Nten id: {} not found in Context", id);
+        }
+    }
+
+    pub fn get_grad_as_2d<const R: usize, const C: usize, T: Dtype>(&self, id: &NtenID) -> Tensor2d<R, C, T> {
+        if let Some(nten) = self.varstore.body.get(id) {
+            if let Some(grad) = &nten.grad {
+                grad.clone().to_typed2d().unwrap()
             } else {
                 panic!("grad of Nten id: {} is None", id);
             }
@@ -96,6 +131,26 @@ impl Context {
             }
         } else {
             panic!("Nten id: {} not found in Context", id)
+        }
+    }
+
+    pub fn insert_tensor(&mut self, id: &NtenID, tensor: Tensor) {
+        self.temp_tensors.insert(*id, tensor);
+    }
+    pub fn get_tensor(&mut self, id: &NtenID) -> Tensor {
+        if let Some(tensor) = self.temp_tensors.get(id) {
+            // TensorはstoreageがArcでほかがnameとshapeなのでクローンしてよい。
+            tensor.clone()
+        } else {
+            panic!("temp tensor of Nten id: {} not found in Context", id);
+        }
+    }
+    pub fn get_tensor_as_2d<const R: usize, const C: usize, T: Dtype>(&mut self, id: &NtenID) -> Tensor2d<R, C, T> {
+        if let Some(tensor) = self.temp_tensors.get(id) {
+            // TensorはstoreageがArcでほかがnameとshapeなのでクローンしてよい。
+            tensor.clone().to_typed2d().unwrap()
+        } else {
+            panic!("temp tensor of Nten id: {} not found in Context", id);
         }
     }
 }
@@ -137,7 +192,7 @@ impl Autograd {
         results
     }
 
-    pub fn backward<'a>(&'a mut self, result: Nten) -> &'a Context {
+    pub fn backward<'a>(&'a mut self, result: Nten) -> &'a mut Context {
         if let None = &result.grad {
             panic!("cannot start backward. grad of result nten is None");
         }
@@ -148,12 +203,11 @@ impl Autograd {
             //LOGGER.debug(self.tape[i].name());
             self.tape[i].backward(&mut self.ctx);
         }
-        &self.ctx
+        &mut self.ctx
     }
 
     pub fn _build_tape<const N: usize>(&mut self, results: &[Nten; N]) {
         //! 1, 結果側からグラフ探索を行って結果をテープにする
-        //! 2, ContextのVarStoreにすべてのNtenの形だけ作っておく。
         let mut already_seen = HashSet::new();
         let mut stack = Vec::new();
         for tensor in results.iter() {
@@ -176,5 +230,30 @@ impl Autograd {
         }
 
         self.tape.reverse();
+    }
+
+    pub fn zero_grad(&mut self) {
+        // 削除すべきキーのリストを作成
+        let keys_to_remove: Vec<_> = self.ctx.varstore.body
+            .iter()
+            .filter_map(|(id, _)| {
+                let is_parameter = self.ctx.varstore.parameter_ids.contains(id);
+                if !is_parameter {
+                    Some(*id)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // キーに基づいて要素を削除
+        for id in keys_to_remove {
+            self.ctx.varstore.body.remove(&id);
+        }
+
+        // parameterのgradを削除
+        for (id, nten) in self.ctx.varstore.body.iter_mut() {
+            nten.grad = None;
+        }
     }
 }

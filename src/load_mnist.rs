@@ -98,8 +98,11 @@ pub fn selialize_minst(image_datas: &[[[u8; NUMBER_OF_COLUMNS]; NUMBER_OF_ROWS]]
 }
 
 
-use crate::tensor::{Storage, Tensor2d};
-pub fn shuffle_and_make_batch<const B: usize>(data: Vec<[u8; 784]>) -> Vec<Tensor2d<B, 784, f32>> {
+use crate::tensor::Tensor2d;
+pub fn shuffle_and_make_batch<const B: usize>(
+    data: &Vec<[u8; 784]>,
+    labels: &Vec<u8>,
+) -> (Vec<Tensor2d<B, 784, f32>>, Vec<Tensor2d<B, 10, f32>>) {
     let mut rng = rand::thread_rng();
     let mut indices: Vec<usize> = (0..data.len()).collect();
     indices.shuffle(&mut rng);
@@ -107,13 +110,15 @@ pub fn shuffle_and_make_batch<const B: usize>(data: Vec<[u8; 784]>) -> Vec<Tenso
     // Calculate the number of full batches
     let num_batches: usize = indices.len() / B;
 
-    // Preallocate the vector of batches
-    let mut batches: Vec<Tensor2d::<B, 784, f32>> = Vec::with_capacity(num_batches);
+    // Preallocate the vectors of batches for data and labels
+    let mut data_batches: Vec<Tensor2d<B, 784, f32>> = Vec::with_capacity(num_batches);
+    let mut label_batches: Vec<Tensor2d<B, 10, f32>> = Vec::with_capacity(num_batches);
 
     for batch_idx in 0..num_batches {
-        // Directly allocate memory for the batch
+        // Directly allocate memory for the batch of data and labels
         let mut batch_data: Vec<f32> = Vec::with_capacity(B * 784);
-        
+        let mut batch_labels: Vec<f32> = Vec::with_capacity(B * 10);
+
         for idx in batch_idx * B..(batch_idx + 1) * B {
             // Get the original index after shuffling
             let original_idx = indices[idx];
@@ -121,12 +126,19 @@ pub fn shuffle_and_make_batch<const B: usize>(data: Vec<[u8; 784]>) -> Vec<Tenso
             for &byte in &data[original_idx] {
                 batch_data.push(byte as f32);
             }
+            // Convert label to one-hot vector and add to batch_labels
+            let mut one_hot: Vec<f32> = vec![0.0; 10];
+            one_hot[labels[original_idx] as usize] = 1.0;
+            batch_labels.extend(one_hot);
         }
 
-        // Create a Tensor2d for this batch
-        let tensor: Tensor2d<B, 784, f32> = Tensor2d::new_from_vec(batch_data).unwrap();
-        batches.push(tensor);
+        // Create Tensor2d for this batch of data and labels
+        let data_tensor: Tensor2d<B, 784, f32> = Tensor2d::new_from_vec(batch_data).unwrap();
+        let label_tensor: Tensor2d<B, 10, f32> = Tensor2d::new_from_vec(batch_labels).unwrap();
+
+        data_batches.push(data_tensor);
+        label_batches.push(label_tensor);
     }
 
-    batches
+    (data_batches, label_batches)
 }

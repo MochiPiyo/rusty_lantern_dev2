@@ -2,9 +2,17 @@ use std::fmt::{format, Debug, Display, Formatter};
 
 
 // トレイト'staticは内部に参照を含まないことを保証する
-pub trait Dtype: Copy + Debug + 'static {
+pub trait Dtype: Copy + Debug + PartialOrd + Sized + 'static {
+    /*
+    PartialOrd: 
+    Sized: for transmute
+     */
     fn default() -> Self;
     fn type_name() -> String;
+    fn from_f32(x: f32) -> Self;
+    fn to_f32(&self) -> Result<f32, ()>;
+    // fn to_gf32
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 impl Dtype for f32 {
@@ -15,7 +23,47 @@ impl Dtype for f32 {
     fn type_name() -> String {
         "f32".to_string()
     }
+
+    fn from_f32(x: f32) -> Self {
+        x
+    }
+
+    fn to_f32(&self) -> Result<f32, ()> {
+        let any = self.as_any();
+        if let Some(x) = any.downcast_ref::<f32>() {
+            Ok(*x)
+        } else {
+            Err(())
+        }
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
+
+impl Dtype for bool {
+    fn default() -> Self {
+        false
+    }
+
+    fn type_name() -> String {
+        "bool".to_string()
+    }
+
+    fn from_f32(x: f32) -> Self {
+        panic!("impl Dtype for bool::from_f32() >> can not create bool from f32")
+    }
+
+    fn to_f32(&self) -> Result<f32, ()> {
+        panic!("impl Dtype for bool::from_f32() >> can not create bool from f32")
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum Shape {

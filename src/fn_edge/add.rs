@@ -11,7 +11,7 @@ FnEdgeは全デバイスで共通，FnEdgeの内部で分岐する
 */
 
 // this FnEdge's front fn is implemented at Tensor2d
-// fn add() @Tensor2d
+// fn add() @Nten2d
 
 // reference impl
 pub fn add<const R: usize, const C: usize, T: Dtype>(lhs: &Nten, rhs: &Nten) -> Nten {
@@ -63,8 +63,8 @@ impl<const R: usize, const C: usize, T: Dtype> FnEdge for Add2d<R, C, T> {
 
     fn forward(&self, ctx: &mut Context) {
         LOGGER.debug(format!("Add2d<{},{},{}> forward", R, C, T::type_name()));
-        let input1: Tensor2d<R, C, T> = ctx.get_val(&self.input1_id).to_typed2d().unwrap();
-        let input2: Tensor2d<R, C, T> = ctx.get_val(&self.input2_id).to_typed2d().unwrap();
+        let input1: Tensor2d<R, C, T> = ctx.get_val_as_2d(&self.input1_id);
+        let input2: Tensor2d<R, C, T> = ctx.get_val_as_2d(&self.input2_id);
 
         let output = input1.add(&input2);
         LOGGER.debug(format!("{:?}", &output));
