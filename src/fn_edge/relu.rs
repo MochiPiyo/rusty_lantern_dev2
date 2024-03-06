@@ -46,11 +46,11 @@ impl<const R: usize, const C: usize, T: Dtype> FnEdge for Relu2d<R, C, T> {
     }
 
     fn backward(&self, ctx: &mut crate::autograd::Context) {
-        let din: Tensor2d<R, C, T> = ctx.get_val_as_2d(&self.output_id);
+        let din: Tensor2d<R, C, T> = ctx.get_grad_as_2d(&self.output_id);
 
         let mask: Tensor2d<R, C, bool> = ctx.get_tensor_as_2d(&self.mask_cach_id);
         let dout: Tensor2d<R, C, T> = din.replace_scalar_where(&mask, T::from_f32(0.0));
 
-        ctx.add_assign_grad(&self.output_id, &dout.to_untyped());
+        ctx.add_assign_grad(&self.input_id, &dout.to_untyped());
     }
 }

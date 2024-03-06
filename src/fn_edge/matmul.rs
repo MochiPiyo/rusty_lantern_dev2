@@ -40,7 +40,7 @@ impl<const N: usize, const M: usize, const O: usize, T: Dtype> FnEdge for Matmul
 
 
     fn forward(&self, ctx: &mut Context) {
-        ctx.varstore.print_all_contents_id();
+        //ctx.varstore.print_all_contents_id();
         let lhs: Tensor2d<N, M, T> = ctx.get_val_as_2d(&self.lhs_id);
         let rhs: Tensor2d<M, O, T> = ctx.get_val_as_2d(&self.rhs_id);
 

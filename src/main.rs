@@ -212,7 +212,7 @@ fn mnist() {
     const BATCH_SIZE: usize = 64;
     const HIDDEN_SIZE: usize = 200;
     let learning_rate: f32 = 0.01;
-    let num_epoch: usize = 100;
+    let num_epoch: usize = 3;
 
 
 
@@ -233,13 +233,14 @@ fn mnist() {
     let model: Model<BATCH_SIZE, HIDDEN_SIZE> = Model::new(&mut vs);
 
     
-    
+    let mut losses: Vec<f32> = Vec::new();
     for i in 0..num_epoch {
         // shuffle and make batch
         let (train_image_batches,
             train_label_batches): (Vec<Tensor2d<BATCH_SIZE, 784, f32>>, Vec<Tensor2d<BATCH_SIZE, 10, f32>>)
              = shuffle_and_make_batch(&train_images, &train_labels);
         
+        let mut loss = 0.0;
         // learn batch
         for (images, labels) in train_image_batches.iter().zip(train_label_batches.iter()) {
             // mark as input !
@@ -250,8 +251,8 @@ fn mnist() {
             let graph = model.forward(&images);
             vs.print_all_contents_id();
             let mut predict = autograd.step_forward([graph.to_untyped()]);
-            let loss = loss_fn::softmax_cross_entropy_f32(&mut predict[0], labels.to_untyped());
-    
+            loss = loss_fn::softmax_cross_entropy_f32(&mut predict[0], labels.to_untyped());
+
             //println!("{:?}", predict[0].grad);
             let ctx: &mut Context = autograd.backward(&predict[0]);
             
@@ -260,7 +261,10 @@ fn mnist() {
     
             autograd.zero_grad();
         }
+        println!("epoch {}, Loss is {}", i, loss);
+        losses.push(loss);
     }
+    println!("Losses: {:?}", losses);
 }
 
 

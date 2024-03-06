@@ -46,15 +46,15 @@ impl VarStore {
     }
 
     pub fn print_all_contents_id(&self) {
-        println!("{}::{}() >> now in vs, there are: ", "VarStore".green(), "print_all_contents_id".yellow() );
+        LOGGER.debug(format!("{}::{}() >> now in vs, there are: ", "VarStore".green(), "print_all_contents_id".yellow()));
         if self.body.lock().unwrap().len() == 0 {
-            println!("- Nothing in VarStore!")
+            LOGGER.debug(format!("- Nothing in VarStore!"))
         }
         for (id, nten) in self.body.lock().unwrap().iter() {
-            println!("- {} id:{} name:\"{}\" shape:{}", "Nten".green(), id, nten.name, nten.shape.to_string());
+            LOGGER.debug(format!("- {} id:{} name:\"{}\" shape:{}", "Nten".green(), id, nten.name, nten.shape.to_string()));
         }
-        println!("paramter ids are: {:?}", self.parameter_ids);
-        println!("lending: {:?}", self.lending.iter())
+        LOGGER.debug(format!("paramter ids are: {:?}", self.parameter_ids));
+        LOGGER.debug(format!("lending: {:?}", self.lending.iter()))
 
     }
 }
@@ -298,5 +298,7 @@ impl Autograd {
         for (id, nten) in self.ctx.varstore.body.lock().unwrap().iter_mut() {
             nten.grad = None;
         }
+        self.tape.clear();
+        self.next_execute_index = 0;
     }
 }

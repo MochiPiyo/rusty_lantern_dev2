@@ -68,7 +68,7 @@ pub fn softmax_cross_entropy_f32(predict: &mut Nten, teacher: Tensor) -> f32 {
     // Update the gradient in the predict tensor
     predict.set_grad(Tensor::new_from_vec(grad, predict.shape).unwrap());
     
-    println!("{:?}", predict.grad);
+    //println!("{:?}", predict.grad);
 
     loss as f32
 }

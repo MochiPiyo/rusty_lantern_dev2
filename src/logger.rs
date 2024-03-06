@@ -53,7 +53,7 @@ impl Logger {
     // とりあえずformat!するためにStringで受ける。あとでマクロにする
     pub fn debug(&self, string: String) {
         self.logger.lock().unwrap().history.push(Log::Debug(string));
-        self.on_update();
+        //self.on_update();
     }
     pub fn warning(&self, string: String) {
         self.logger.lock().unwrap().history.push(Log::Warning(string));
