@@ -317,8 +317,9 @@ impl<const R: usize, const C: usize> Tensor2d<R, C, f32> {
             _marker: PhantomData,
         }
     }
-    pub fn new_init_he(mean: f64, fan_in: usize) -> Self {
-        let std_dev = (2.0 / fan_in as f64).sqrt();
+    pub fn new_init_he() -> Self {
+        let mean = 0.0;
+        let std_dev = (2.0 / R as f64).sqrt();
 
         let mut rng = rand::thread_rng();
         let normal = Normal::new(mean as f64, std_dev as f64).unwrap();

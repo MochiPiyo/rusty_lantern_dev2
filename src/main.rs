@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{process::exit, sync::Arc};
 
 use autograd::{Autograd, VarStore};
 use dtype::Dtype;
@@ -173,6 +173,7 @@ impl<const I: usize, const O: usize> Linear<I, O> {
         // U(-\sqrt{k}, \sqrt{k}), k = 1 / 入力特徴数
         let k: f32 = 1.0 / I as f32;
         let weight: Tensor2d<I, O, f32> = Tensor2d::new_uniform(-k.sqrt(), k.sqrt());
+        //let weight: Tensor2d<I, O, f32> = Tensor2d::new_init_he();
         let bias: Tensor2d<1, O, f32> = Tensor2d::new_zeros();
         Self {
             weight: Nten2d::new_from_val(weight).name("Linear weight").as_parameter(vs),
@@ -209,10 +210,10 @@ impl<const B: usize, const H: usize> Model<B, H> {
     }
 }
 fn mnist() {
-    const BATCH_SIZE: usize = 64;
+    const BATCH_SIZE: usize = 1024;
     const HIDDEN_SIZE: usize = 200;
     let learning_rate: f32 = 0.01;
-    let num_epoch: usize = 3;
+    let num_epoch: usize = 100;
 
 
 
@@ -235,6 +236,9 @@ fn mnist() {
     
     let mut losses: Vec<f32> = Vec::new();
     for i in 0..num_epoch {
+        //println!("{:?}", model.linear2.weight.val);
+        //println!("{:?}", model.linear2.bias.val);
+
         // shuffle and make batch
         let (train_image_batches,
             train_label_batches): (Vec<Tensor2d<BATCH_SIZE, 784, f32>>, Vec<Tensor2d<BATCH_SIZE, 10, f32>>)
@@ -253,14 +257,20 @@ fn mnist() {
             let mut predict = autograd.step_forward([graph.to_untyped()]);
             loss = loss_fn::softmax_cross_entropy_f32(&mut predict[0], labels.to_untyped());
 
-            //println!("{:?}", predict[0].grad);
             let ctx: &mut Context = autograd.backward(&predict[0]);
             
+            //println!("{:?}", ctx.get_grad(&model.linear1.weight.id));
+
             // update parameter
             optimizer.update(ctx);
     
             autograd.zero_grad();
+
+            //println!("{:?}", model.linear2.weight.val);
+            //println!("{:?}", model.linear2.bias.val);
+            //exit(0);
         }
+        //println!("{:?}", model.linear2.bias.val);
         println!("epoch {}, Loss is {}", i, loss);
         losses.push(loss);
     }

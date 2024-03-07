@@ -124,7 +124,7 @@ pub fn shuffle_and_make_batch<const B: usize>(
             let original_idx = indices[idx];
             // Convert u8 array to f32 and flatten it directly into the batch data
             for &byte in &data[original_idx] {
-                batch_data.push(byte as f32);
+                batch_data.push(byte as f32/ u8::MAX as f32);
             }
             // Convert label to one-hot vector and add to batch_labels
             let mut one_hot: Vec<f32> = vec![0.0; 10];

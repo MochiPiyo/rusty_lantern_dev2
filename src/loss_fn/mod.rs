@@ -39,36 +39,45 @@ pub fn softmax_cross_entropy_f32(predict: &mut Nten, teacher: Tensor) -> f32 {
     let mut loss: f64 = 0.0;
     let mut grad = vec![0.0; logits.len()];
 
+    //println!("change batch");
     for i in 0..batch_size {
         let start_idx = i * one_data_len;
         let end_idx = start_idx + one_data_len;
+        //println!("{}", start_idx);
         let logits_slice = &logits[start_idx..end_idx];
         let labels_slice = &labels[start_idx..end_idx];
-
+        //println!("logits_slice{:?}", logits_slice);
         // Softmax
+        // オーバーフロー防止のためlargestを全体から引く
         let max_logit = logits_slice.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
         let exp_logits: Vec<f32> = logits_slice.iter().map(|&x| (x - max_logit).exp()).collect();
+        //println!("exp_logits{:?}", exp_logits);
+        // exp/exp_sum
         let sum_exp_logits: f32 = exp_logits.iter().sum();
         let softmax: Vec<f32> = exp_logits.iter().map(|&x| x / sum_exp_logits).collect();
-
+        //println!("softmax{:?}", softmax);
         // Cross-entropy loss
-        let log_softmax: Vec<f32> = softmax.iter().map(|&x| x.ln()).collect();
+        // ! f32::MINを使ってはいけない
+        let log_softmax: Vec<f32> = softmax.iter().map(|&x| (x + f32::EPSILON).ln()).collect();
+        //println!("log_softmax{:?}", log_softmax);
         for (s, l) in log_softmax.iter().zip(labels_slice.iter()) {
+            //print!("({}, {})", s, l);
             loss -= (l * s) as f64;
         }
 
         // Gradient of the loss w.r.t. the logits
         for (g, (&s, &l)) in grad[start_idx..end_idx].iter_mut().zip(softmax.iter().zip(labels_slice.iter())) {
-            *g += (s - l) / batch_size as f32;
+            //*g += (s - l) / batch_size as f32;
+            *g = s - l;
         }
     }
 
-    loss = loss / batch_size as f64;
+    //print!("{}", loss);
 
     // Update the gradient in the predict tensor
     predict.set_grad(Tensor::new_from_vec(grad, predict.shape).unwrap());
     
     //println!("{:?}", predict.grad);
-
+    loss = loss / batch_size as f64;
     loss as f32
 }
