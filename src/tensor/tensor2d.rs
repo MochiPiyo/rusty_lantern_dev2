@@ -265,6 +265,32 @@ impl<const R: usize, const C: usize, T: Dtype> Tensor2d<R, C, T> {
         }
     }
 
+    pub fn top_index_per_batch(&self) -> Vec<usize> {
+        match &*self.storage() {
+            Storage::Densef32(raw) => {
+                let mut indices = Vec::new();
+                for data in raw.body.chunks(C) {
+                    let mut largest = f32::MIN;
+                    let mut index: usize = 0;
+                    for (i, val) in data.iter().enumerate() {
+                        if *val > largest {
+                            largest = *val;
+                            index = i;
+                        }
+                    }
+                    indices.push(index);
+                }
+                
+                indices
+            },
+            _ => {
+                LOGGER.error(format!("{}::{}() >> Storage type expection. {} is not supported",
+                    Self::type_name().green(), "top_index_per_batch".yellow(),
+                    self.storage().info()));
+                panic!("")
+            }
+        }
+    }
 }
 
 
@@ -355,6 +381,26 @@ impl<const R: usize, const C: usize> Tensor2d<R, C, bool> {
             name: "bool new_trues".to_string(),
             storage: Storage::new_bools(bools, len),
             _marker: PhantomData,
+        }
+    }
+
+    pub fn count_true(&self) -> usize {
+        match &*self.storage() {
+            Storage::DenseBool(raw) => {
+                let mut counter = 0;
+                for b in raw.iter() {
+                    if b == true {
+                        counter += 1;
+                    }
+                }
+                counter
+            },
+            _ => {
+                LOGGER.error(format!("{}::{}() >> Storage type expection. {} is not supported",
+                    Self::type_name().green(), "count_true".yellow(),
+                    self.storage().info()));
+                panic!("")
+            }
         }
     }
 }

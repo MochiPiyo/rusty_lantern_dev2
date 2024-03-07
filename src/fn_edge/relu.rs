@@ -38,6 +38,9 @@ impl<const R: usize, const C: usize, T: Dtype> FnEdge for Relu2d<R, C, T> {
         let input: Tensor2d<R, C, T> = ctx.get_val_as_2d(&self.input_id);
 
         let mask: Tensor2d<R, C, bool> = input.select_smaller_than(T::from_f32(0.0));
+
+        //println!("relu mask count: {}/{}", mask.count_true(), R * C);
+
         ctx.insert_tensor(&self.mask_cach_id, mask.to_untyped());
 
         let output: Tensor2d<R, C, T> = input.replace_scalar_where(&mask, T::from_f32(0.0));

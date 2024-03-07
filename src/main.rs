@@ -1,6 +1,7 @@
 use std::{process::exit, sync::Arc};
 
 use autograd::{Autograd, VarStore};
+use colored::Colorize;
 use dtype::Dtype;
 use load_mnist::{load_minst, shuffle_and_make_batch};
 //use optimizer::Sgd;
@@ -173,6 +174,7 @@ impl<const I: usize, const O: usize> Linear<I, O> {
         // U(-\sqrt{k}, \sqrt{k}), k = 1 / 入力特徴数
         let k: f32 = 1.0 / I as f32;
         let weight: Tensor2d<I, O, f32> = Tensor2d::new_uniform(-k.sqrt(), k.sqrt());
+        //println!("weight @new {:?}", weight);
         //let weight: Tensor2d<I, O, f32> = Tensor2d::new_init_he();
         let bias: Tensor2d<1, O, f32> = Tensor2d::new_zeros();
         Self {
@@ -210,10 +212,10 @@ impl<const B: usize, const H: usize> Model<B, H> {
     }
 }
 fn mnist() {
-    const BATCH_SIZE: usize = 1024;
-    const HIDDEN_SIZE: usize = 200;
+    const BATCH_SIZE: usize = 500;
+    const HIDDEN_SIZE: usize = 300;
     let learning_rate: f32 = 0.01;
-    let num_epoch: usize = 100;
+    let num_epoch: usize = 50000;
 
 
 
@@ -246,21 +248,52 @@ fn mnist() {
         
         let mut loss = 0.0;
         // learn batch
-        for (images, labels) in train_image_batches.iter().zip(train_label_batches.iter()) {
+        for (e, (images, labels)) in train_image_batches.iter().zip(train_label_batches.iter()).enumerate() {
+            
+            
             // mark as input !
             let images = Nten2d::new_from_val(images.clone())
                 .name("input")
                 .as_input(&mut vs);
 
+            //println!("weight @ before graph build {:?}", model.linear1.weight.val.as_ref().unwrap());
             let graph = model.forward(&images);
+            //println!("weight @ after graph build {:?}", model.linear1.weight.val.as_ref().unwrap());
             vs.print_all_contents_id();
             let mut predict = autograd.step_forward([graph.to_untyped()]);
+            //println!("weight @ after execute forward {:?}", model.linear1.weight.val.as_ref().unwrap());
+
+            //println!("{}, {:?}", "predict".red(), predict[0].val.as_ref().unwrap());
+
             loss = loss_fn::softmax_cross_entropy_f32(&mut predict[0], labels.to_untyped());
 
             let ctx: &mut Context = autograd.backward(&predict[0]);
             
-            //println!("{:?}", ctx.get_grad(&model.linear1.weight.id));
+            if e == 0 {
+                let predict_index = predict[0].val.clone().unwrap().top_index_per_batch();
+                let label_index = labels.top_index_per_batch();
+                //println!("{:?}\n{:?}", predict_index, label_index);
+                let mut acc = 0;
+                for (p, l) in predict_index.iter().zip(label_index.iter()) {
+                    if *p == *l {
+                        acc += 1;
+                    }
+                }
+                println!("acc {:.2}%", acc as f32/BATCH_SIZE as f32 * 100.0);
 
+                //println!("linear1.weight val {:?}", ctx.get_val(&model.linear1.weight.id));
+                //println!("linear1.bias val {:?}", ctx.get_val(&model.linear1.bias.id));
+                //println!("linear2.weight val {:?}", ctx.get_val(&model.linear2.weight.id));
+                //println!("linear2.bias val {:?}", ctx.get_val(&model.linear2.bias.id));
+
+                //println!("linear1.weight grad {:?}", ctx.get_grad(&model.linear1.weight.id));
+                //println!("linear1.bias grad {:?}", ctx.get_grad(&model.linear1.bias.id));
+                //println!("linear2.weight grad {:?}", ctx.get_grad(&model.linear2.weight.id));
+                //println!("linear2.bias grad {:?}", ctx.get_grad(&model.linear2.bias.id));
+
+            }
+            
+            
             // update parameter
             optimizer.update(ctx);
     
@@ -274,6 +307,7 @@ fn mnist() {
         println!("epoch {}, Loss is {}", i, loss);
         losses.push(loss);
     }
+
     println!("Losses: {:?}", losses);
 }
 

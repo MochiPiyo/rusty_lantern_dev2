@@ -1,5 +1,7 @@
 use std::sync::RwLockWriteGuard;
 
+use colored::Colorize;
+
 use crate::{backend_cpu::RawDense, dtype::{Dtype, Shape}, nten::Nten, tensor::{Storage, Tensor, Tensor2d}};
 
 // implaceは危険なので制限する
@@ -62,22 +64,22 @@ pub fn softmax_cross_entropy_f32(predict: &mut Nten, teacher: Tensor) -> f32 {
         //println!("log_softmax{:?}", log_softmax);
         for (s, l) in log_softmax.iter().zip(labels_slice.iter()) {
             //print!("({}, {})", s, l);
-            loss -= (l * s) as f64;
+            loss -= (l * s) as f64 / batch_size as f64;
         }
 
         // Gradient of the loss w.r.t. the logits
         for (g, (&s, &l)) in grad[start_idx..end_idx].iter_mut().zip(softmax.iter().zip(labels_slice.iter())) {
-            //*g += (s - l) / batch_size as f32;
-            *g = s - l;
+            *g += (s - l) / batch_size as f32;
+            //*g = s - l;
         }
     }
+    // バッチサイズで割る
+    //let _ = grad.iter_mut().map(|i| *i / batch_size as f32);
 
-    //print!("{}", loss);
+    //print!("{}: {:.5?}", "loss fn grad".red(), grad);
 
     // Update the gradient in the predict tensor
     predict.set_grad(Tensor::new_from_vec(grad, predict.shape).unwrap());
     
-    //println!("{:?}", predict.grad);
-    loss = loss / batch_size as f64;
     loss as f32
 }

@@ -1,5 +1,5 @@
 use rayon::prelude::*;
-use std::{fmt::Debug, ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign}, sync::Mutex, thread::panicking};
+use std::{fmt::{write, Debug}, ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign}, sync::Mutex, thread::panicking};
 
 use crate::{dtype::Shape, logger::LOGGER, machine_config::MACHINE_CONFIG};
 
@@ -34,7 +34,8 @@ impl RawDense<f32>
                 let mut result = vec![0.0; lhs_rows * rhs_cols];
 
                 // ikj
-                result.par_chunks_mut(rhs_cols).enumerate().for_each(|(i, result_row)| {
+                // mnist程度では１コアでやったほうがはやいのでpar_chanks_mutからparをとっている
+                result.chunks_mut(rhs_cols).enumerate().for_each(|(i, result_row)| {
                     for k in 0..lhs_cols {
                         for j in 0..rhs_cols {
                             result_row[j] += lhs.body[i * lhs_cols + k] * rhs.body[k * rhs_cols + j];

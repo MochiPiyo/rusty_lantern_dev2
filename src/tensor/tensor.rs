@@ -1,4 +1,6 @@
-use std::{marker::PhantomData, sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard}};
+use std::{fmt::Debug, marker::PhantomData, sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard}};
+
+use colored::Colorize;
 
 use crate::{backend_cpu::RawDense, dtype::{Dtype, Shape}, logger::LOGGER, main};
 
@@ -69,6 +71,34 @@ impl Tensor {
     pub fn override_value(&self, new_value: Self) {
         let mut write = self.storage.write().unwrap();
         *write = new_value.storage().clone();
+    }
+
+    pub fn top_index_per_batch(&self) -> Vec<usize> {
+        match &*self.storage() {
+            Storage::Densef32(raw) => {
+                let mut indices = Vec::new();
+                if let Shape::D2(_, data_len) = self.shape {
+                    for data in raw.body.chunks(data_len) {
+                        let mut largest = f32::MIN;
+                        let mut index: usize = 0;
+                        for (i, val) in data.iter().enumerate() {
+                            if *val > largest {
+                                largest = *val;
+                                index = i;
+                            }
+                        }
+                        indices.push(index);
+                    }
+                }
+                indices
+            }
+            _ => {
+                LOGGER.error(format!("{}::{}() >> Storage type expection. {} is not supported",
+                    "Tensor".green(), "top_index_per_batch".yellow(),
+                    self.storage().info()));
+                panic!("")
+            }
+        }
     }
 
     pub fn to_typed2d<const R: usize, const C: usize, T: Dtype>(&self) -> Result<Tensor2d<R, C, T>, String> {
