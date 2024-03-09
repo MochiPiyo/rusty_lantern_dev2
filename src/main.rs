@@ -3,12 +3,12 @@ use std::{process::exit, sync::Arc};
 use autograd::{Autograd, VarStore};
 use colored::Colorize;
 use dtype::Dtype;
-use load_mnist::{load_minst, shuffle_and_make_batch};
+use lantern_datasets::{load_minst, shuffle_and_make_batch};
 //use optimizer::Sgd;
 use tensor::{Tensor, Tensor2d};
 use nten::{Nten, Nten2d};
 
-use crate::{autograd::Context, load_mnist::selialize_minst, optimizer::{Optimizer, Sgd}};
+use crate::{autograd::Context, lantern_datasets::selialize_minst, optimizer::{Optimizer, Sgd}};
 
 
 mod tensor;
@@ -22,8 +22,31 @@ mod dtype;
 mod logger;
 mod machine_config;
 
-mod load_mnist;
+mod lantern_datasets;
+mod example;
 
+/*
+MNISTの学習デモは./example.rsを見てください。
+
+
+
+main.rsでは開発過程で少しずつ動作検証をした過程を残してあります。
+
+fn raw_add()
+単純な足し算です。lanternでは様々な数値型，GPU，疎行列等に対応するため
+抽象化レイヤーが入っているので，ここをまず動くことを確かめます。
+
+fn nten_add()
+自動微分可能な行列形式Ntenのテストおよび，自動微分機構のAutogradの動作テストです。
+
+fn matmul()
+行列積の自動微分です。
+
+fn mnist()
+デバッグ用なのでMNISTの学習デモは./example.rsを見てください。
+実際のデータセットを使って学習ができることを示しました。ここでは，データセットの作成，
+NNレイヤーの構築，学習のループとモデルパラメーターの更新，結果の評価を行いました。
+*/
 
 fn raw_add() {
     let input1: Tensor2d<2, 2, f32> = Tensor2d::new_from_martix([
@@ -217,8 +240,6 @@ fn mnist() {
     let learning_rate: f32 = 0.01;
     let num_epoch: usize = 50000;
 
-
-
     // load dataset
     // gzは解凍されていること
     let train_image_path = "./mnist_data/train-images.idx3-ubyte";
@@ -226,7 +247,7 @@ fn mnist() {
     let (train_images, train_labels): (Vec<[[u8; 28]; 28]>, Vec<u8>)
          = load_minst(train_image_path, train_label_path);
     let train_images: Vec<[u8; 784]> = selialize_minst(&train_images);
-    
+
     // tools for learning
     let mut autograd = Autograd::new();
     let mut vs = autograd.get_vs();
@@ -235,7 +256,6 @@ fn mnist() {
     // create model
     let model: Model<BATCH_SIZE, HIDDEN_SIZE> = Model::new(&mut vs);
 
-    
     let mut losses: Vec<f32> = Vec::new();
     for i in 0..num_epoch {
         //println!("{:?}", model.linear2.weight.val);
@@ -249,8 +269,6 @@ fn mnist() {
         let mut loss = 0.0;
         // learn batch
         for (e, (images, labels)) in train_image_batches.iter().zip(train_label_batches.iter()).enumerate() {
-            
-            
             // mark as input !
             let images = Nten2d::new_from_val(images.clone())
                 .name("input")
@@ -292,11 +310,8 @@ fn mnist() {
                 //println!("linear2.bias grad {:?}", ctx.get_grad(&model.linear2.bias.id));
 
             }
-            
-            
             // update parameter
             optimizer.update(ctx);
-    
             autograd.zero_grad();
 
             //println!("{:?}", model.linear2.weight.val);
@@ -318,6 +333,8 @@ fn main() {
     //raw_add();
     //nten_add();
     //matmul();
-    mnist();
+    //mnist();
+
+    example::mnist()
 
 }

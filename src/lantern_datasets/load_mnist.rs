@@ -6,7 +6,7 @@ use std::sync::Arc;
 const NUMBER_OF_ROWS: usize = 28;
 const NUMBER_OF_COLUMNS: usize = 28;
 pub fn load_minst(image_path: &str, label_path: &str) -> (Vec<[[u8; NUMBER_OF_COLUMNS]; NUMBER_OF_ROWS]>, Vec<u8>) {
-    println!("load_mnist");
+    //println!("load_mnist");
     use std::fs::File;
     use std::io::Read;
 
