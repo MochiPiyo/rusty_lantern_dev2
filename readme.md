@@ -1,12 +1,11 @@
-<h1><img src="./lantern_rogo1.webp" alt="Lanternロゴ" style="width:70px; vertical-align:middle;"> Rusty Lantern</h1>
 
+<div style="text-align: center;">
+    <img src="./lantern_logo3.png" alt="Lanternロゴ" style="width:200px; vertical-align:middle;">
+</div>
 
-## Welcom to Rusty Lantern Dev !
+# Welcome to Rusty Lantern Dev !
 
 Rusty Lanternはクロスプラットフォームで型安全な次世代のMLライブラリです。このリポジトリでは開発中のLanternのデモを示します。
-
-
-
 
 
 ## MNISTの学習デモ
