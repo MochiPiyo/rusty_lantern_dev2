@@ -16,5 +16,8 @@ rand_distr = "*"
 # color
 colored = "2.0"
 
+
+indicatif = "*"
+
 [build]
 rustflags = ["-A", "warnings"]

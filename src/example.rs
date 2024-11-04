@@ -1,3 +1,5 @@
+use indicatif::ProgressBar;
+
 use crate::{autograd::{Autograd, Context, VarStore}, lantern_datasets, loss_fn, nten::{self, Nten2d}, optimizer::{Optimizer, Sgd}, tensor::Tensor2d};
 
 
@@ -76,6 +78,7 @@ pub fn mnist() {
     // create model
     let model: Model<BATCH_SIZE, HIDDEN_SIZE> = Model::new(&mut vs);
 
+    let progress_bar = ProgressBar::new(print_interval as u64);
     println!("start learning");
     for epoch in 0..num_epoch {
         // shuffle and make batch
@@ -85,6 +88,8 @@ pub fn mnist() {
         
         // learn batch
         for (i, (images, labels)) in train_image_batches.iter().zip(train_label_batches.iter()).enumerate() {
+            progress_bar.set_position((i % print_interval) as u64);
+            
             // mark as input !
             let images = Nten2d::new_from_val(images.clone())
                 .name("input")
